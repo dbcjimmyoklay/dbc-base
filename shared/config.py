@@ -9,6 +9,11 @@ import os
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CREDS_PATH = os.path.join(BASE_DIR, 'dbc-credentials.json')
 
+# ===== PORTAL =====
+APPS_SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbw2-7v48isKdkrJyZNCJEI1UEFfbL3lupGZwUPO4vHyt9B3AjkxKaV3ZHQlvz_LenOI/exec'
+PORTAL_URL       = 'https://dbcjimmyoklay.github.io/dbc-base'
+GOOGLE_CLIENT_ID = '278003648368-dd08o1b24knf3tlvhfp7rustnq3cs2gc.apps.googleusercontent.com'
+
 # ===== Google Drive =====
 # 你放置「原始大總表*.xlsx」的 Drive 資料夾 ID
 # 開啟資料夾網址後，最後一段路徑就是 ID

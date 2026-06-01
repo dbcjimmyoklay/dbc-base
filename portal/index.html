@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0f1e">
+<title>DBC 系統</title>
+<link rel="manifest" href="manifest.json">
+<style>
+/* ── 基礎 ── */
+:root {
+  --bg:     #0a0f1e;
+  --s1:     #111827;
+  --s2:     #1a2235;
+  --bd:     #1e2d45;
+  --ac:     #3b82f6;
+  --tx:     #e2e8f0;
+  --mu:     #64748b;
+  --green:  #10b981;
+  --yellow: #f59e0b;
+  --red:    #ef4444;
+  --nav-w:  240px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--tx); font-family: 'Noto Sans TC', system-ui, sans-serif; min-height: 100dvh; }
+
+/* ── 登入頁 ── */
+#login-screen {
+  min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 60% 40%, #1e3a5f 0%, #0a0f1e 70%);
+}
+.login-card {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 16px;
+  padding: 48px 40px;
+  text-align: center;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.login-logo { font-size: 40px; margin-bottom: 12px; }
+.login-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.login-sub { font-size: 13px; color: var(--mu); margin-bottom: 32px; }
+.g-signin-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 13px 20px;
+  background: #fff; color: #3c4043;
+  border: none; border-radius: 8px;
+  font-size: 15px; font-weight: 500;
+  cursor: pointer; transition: box-shadow .2s;
+}
+.g-signin-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.g-signin-btn img { width: 20px; height: 20px; }
+
+/* ── 等待審核頁 ── */
+#pending-screen {
+  min-height: 100dvh;
+  display: none; align-items: center; justify-content: center;
+}
+.pending-card {
+  background: var(--s1); border: 1px solid var(--bd);
+  border-radius: 16px; padding: 48px 40px;
+  text-align: center; width: 400px; max-width: 90vw;
+}
+.pending-icon { font-size: 48px; margin-bottom: 16px; }
+.pending-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.pending-sub { font-size: 14px; color: var(--mu); line-height: 1.6; margin-bottom: 24px; }
+.pending-email {
+  background: var(--s2); border: 1px solid var(--bd);
+  border-radius: 8px; padding: 10px 16px;
+  font-size: 13px; color: var(--ac); margin-bottom: 24px;
+}
+.btn-logout {
+  background: transparent; border: 1px solid var(--bd);
+  color: var(--mu); border-radius: 8px;
+  padding: 10px 20px; font-size: 13px; cursor: pointer;
+  transition: all .2s;
+}
+.btn-logout:hover { border-color: var(--red); color: var(--red); }
+
+/* ── 主畫面 ── */
+#app-screen { display: none; min-height: 100dvh; }
+
+/* 側邊欄（桌面）*/
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--nav-w);
+  background: var(--s1); border-right: 1px solid var(--bd);
+  display: flex; flex-direction: column;
+  z-index: 100; transition: transform .25s;
+}
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--bd);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-logo .logo-i {
+  width: 34px; height: 34px; background: var(--ac);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.sidebar-logo .logo-t { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.sidebar-logo .logo-s { font-size: 10px; color: var(--mu); }
+
+.nav-section { padding: 10px 12px 4px; font-size: 10px; color: var(--mu); text-transform: uppercase; letter-spacing: 1px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; margin: 2px 8px;
+  border-radius: 8px; cursor: pointer;
+  font-size: 14px; color: var(--mu);
+  transition: all .15s; text-decoration: none;
+}
+.nav-item:hover { background: var(--s2); color: var(--tx); }
+.nav-item.active { background: rgba(59,130,246,.15); color: var(--ac); font-weight: 500; }
+.nav-item .icon { width: 18px; text-align: center; flex-shrink: 0; }
+
+/* 子選單 */
+.nav-sub { padding-left: 12px; }
+.nav-sub .nav-item { font-size: 13px; padding: 8px 12px; }
+
+.sidebar-bottom {
+  margin-top: auto; padding: 12px;
+  border-top: 1px solid var(--bd);
+}
+.user-info {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  background: var(--s2);
+}
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--ac); display: flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 14px;
+  flex-shrink: 0; overflow: hidden;
+}
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-name { font-size: 13px; font-weight: 500; }
+.user-role { font-size: 11px; color: var(--mu); }
+.btn-signout {
+  width: 100%; margin-top: 8px; padding: 8px;
+  background: transparent; border: 1px solid var(--bd);
+  color: var(--mu); border-radius: 6px;
+  font-size: 12px; cursor: pointer; transition: all .2s;
+}
+.btn-signout:hover { border-color: var(--red); color: var(--red); }
+
+/* 主內容區 */
+.main-content {
+  margin-left: var(--nav-w);
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+}
+.topbar {
+  height: 56px; background: var(--s1);
+  border-bottom: 1px solid var(--bd);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; position: sticky; top: 0; z-index: 50;
+}
+.topbar-title { font-size: 16px; font-weight: 600; }
+.menu-toggle { display: none; background: none; border: none; color: var(--tx); font-size: 20px; cursor: pointer; }
+.page-content { flex: 1; padding: 24px; }
+
+/* 首頁 */
+.welcome-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.welcome-card {
+  background: var(--s1); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 20px;
+  cursor: pointer; transition: all .2s;
+  text-decoration: none; color: var(--tx);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.welcome-card:hover { border-color: var(--ac); background: var(--s2); transform: translateY(-2px); }
+.welcome-card .icon { font-size: 28px; }
+.welcome-card .title { font-size: 15px; font-weight: 600; }
+.welcome-card .desc { font-size: 12px; color: var(--mu); }
+
+/* 內容頁 */
+.content-header { margin-bottom: 20px; }
+.content-header h1 { font-size: 20px; font-weight: 700; }
+.content-header p { font-size: 13px; color: var(--mu); margin-top: 4px; }
+
+/* Loading */
+.loading {
+  display: flex; align-items: center; justify-content: center;
+  height: 200px; gap: 10px; color: var(--mu);
+}
+.spinner {
+  width: 20px; height: 20px;
+  border: 2px solid var(--bd);
+  border-top-color: var(--ac);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 遮罩（手機選單用）*/
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 99;
+}
+
+/* ── 手機版 ── */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; }
+  .menu-toggle { display: block; }
+  .overlay.show { display: block; }
+  .page-content { padding: 16px; }
+  .welcome-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ① 登入畫面 -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🏔</div>
+    <div class="login-title">DBC 系統</div>
+    <div class="login-sub">請使用 Google 帳號登入</div>
+    <button class="g-signin-btn" onclick="signIn()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+      使用 Google 帳號登入
+    </button>
+  </div>
+</div>
+
+<!-- ② 等待審核畫面 -->
+<div id="pending-screen">
+  <div class="pending-card">
+    <div class="pending-icon">⏳</div>
+    <div class="pending-title">帳號審核中</div>
+    <div class="pending-sub">
+      您的帳號申請已收到，<br>
+      管理員審核通過後即可使用系統。<br>
+      通常在 1 個工作日內完成。
+    </div>
+    <div class="pending-email" id="pending-email-txt"></div>
+    <button class="btn-logout" onclick="signOut()">登出</button>
+  </div>
+</div>
+
+<!-- ③ 主畫面 -->
+<div id="app-screen">
+  <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+  <!-- 側邊欄 -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-i">🏔</div>
+      <div>
+        <div class="logo-t">DBC 系統</div>
+        <div class="logo-s">滑雪行程管理</div>
+      </div>
+    </div>
+
+    <!-- 導航選單（動態產生）-->
+    <div id="nav-menu" style="flex:1;overflow-y:auto;padding:8px 0;"></div>
+
+    <div class="sidebar-bottom">
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar"></div>
+        <div>
+          <div class="user-name" id="user-name-txt">—</div>
+          <div class="user-role" id="user-role-txt">—</div>
+        </div>
+      </div>
+      <button class="btn-signout" onclick="signOut()">登出</button>
+    </div>
+  </nav>
+
+  <!-- 主內容 -->
+  <div class="main-content">
+    <div class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="topbar-title" id="page-title">首頁</div>
+      <div style="width:40px"></div>
+    </div>
+    <div class="page-content" id="page-content">
+      <div class="loading"><div class="spinner"></div> 載入中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async></script>
+
+<script>
+// ── 設定 ──
+const CLIENT_ID      = '278003648368-dd08o1b24knf3tlvhfp7rustnq3cs2gc.apps.googleusercontent.com';
+const APPS_SCRIPT    = 'https://script.google.com/macros/s/AKfycbw2-7v48isKdkrJyZNCJEI1UEFfbL3lupGZwUPO4vHyt9B3AjkxKaV3ZHQlvz_LenOI/exec';
+
+// ── 頁面定義 ──
+const PAGE_DEF = {
+  '課程安排'    : { icon: '📋', section: '資料', desc: '旅客課程安排總覽' },
+  '入住單－野澤': { icon: '🏔', section: '入住單', desc: '野澤入住資訊＋車況' },
+  '入住單－斑尾': { icon: '⛷', section: '入住單', desc: '斑尾入住資訊＋車況' },
+  '入住單－龍平': { icon: '🇰🇷', section: '入住單', desc: '龍平入住資訊＋車況' },
+  '送客單－野澤': { icon: '🚌', section: '送客單', desc: '野澤送客資訊' },
+  '送客單－斑尾': { icon: '🚌', section: '送客單', desc: '斑尾送客資訊' },
+  '送客單－龍平': { icon: '🚌', section: '送客單', desc: '龍平送客資訊' },
+  '教練班表'    : { icon: '👨‍🏫', section: '管理', desc: '教練排班資訊' },
+  '每日教練需求': { icon: '📊', section: '管理', desc: '各雪場每日教練需求' },
+  '銷量分析'    : { icon: '📈', section: '管理', desc: '報名趨勢與銷量統計' },
+};
+
+// ── 狀態 ──
+let currentUser  = null;
+let currentPage  = null;
+let tokenClient  = null;
+let idToken      = null;
+
+// ── Google 登入 ──
+function signIn() {
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback : handleCredential,
+    auto_select: false,
+  });
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      // 直接顯示帳號選擇
+      google.accounts.id.renderButton(
+        document.getElementById('login-screen'),
+        { theme: 'outline', size: 'large', width: 280 }
+      );
+    }
+  });
+}
+
+function handleCredential(response) {
+  idToken = response.credential;
+
+  // 解析 email/name（不驗證，交給 Apps Script 驗證）
+  const payload = JSON.parse(atob(idToken.split('.')[1]));
+  const email   = payload.email;
+  const name    = payload.name || '';
+
+  verifyWithServer(idToken, name);
+}
+
+// ── 呼叫 Apps Script 驗證 ──
+async function verifyWithServer(token, name) {
+  try {
+    const res = await fetch(APPS_SCRIPT, {
+      method : 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body   : JSON.stringify({token, name}),
+    });
+    const data = await res.json();
+    handleAuthResult(data);
+  } catch(e) {
+    alert('連線失敗，請稍後再試\n' + e.message);
+  }
+}
+
+// ── 處理驗證結果 ──
+function handleAuthResult(data) {
+  if (data.status === 'approved') {
+    currentUser = data;
+    showApp();
+  } else if (data.status === 'pending') {
+    showPending(data.email);
+  } else if (data.status === 'disabled') {
+    alert('此帳號已被停用，請聯絡管理員。');
+  } else {
+    alert('登入失敗：' + (data.message || '未知錯誤'));
+  }
+}
+
+// ── 顯示各畫面 ──
+function showPending(email) {
+  document.getElementById('login-screen').style.display   = 'none';
+  document.getElementById('pending-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display     = 'none';
+  document.getElementById('pending-email-txt').textContent = email;
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display   = 'none';
+  document.getElementById('pending-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display     = 'block';
+
+  // 使用者資訊
+  const u = currentUser;
+  document.getElementById('user-name-txt').textContent = u.name || u.email;
+  document.getElementById('user-role-txt').textContent = u.role || '';
+  const av = document.getElementById('user-avatar');
+  av.textContent = (u.name || u.email)[0].toUpperCase();
+
+  buildNav(u.pages || []);
+  showHome();
+}
+
+// ── 建立導航選單 ──
+function buildNav(pages) {
+  const menu = document.getElementById('nav-menu');
+  menu.innerHTML = '';
+
+  // 首頁
+  menu.innerHTML += `
+    <div class="nav-item active" id="nav-home" onclick="showHome()">
+      <span class="icon">🏠</span> 首頁
+    </div>`;
+
+  // 按 section 分組
+  const sections = {};
+  pages.forEach(p => {
+    const def = PAGE_DEF[p];
+    if (!def) return;
+    if (!sections[def.section]) sections[def.section] = [];
+    sections[def.section].push(p);
+  });
+
+  Object.entries(sections).forEach(([sec, ps]) => {
+    menu.innerHTML += `<div class="nav-section">${sec}</div>`;
+    ps.forEach(p => {
+      const def = PAGE_DEF[p];
+      const id  = 'nav-' + p.replace(/[－\s]/g, '-');
+      menu.innerHTML += `
+        <div class="nav-item" id="${id}" onclick="navigateTo('${p}')">
+          <span class="icon">${def.icon}</span> ${p}
+        </div>`;
+    });
+  });
+}
+
+// ── 導航 ──
+function navigateTo(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const navId = 'nav-' + page.replace(/[－\s]/g, '-');
+  const navEl = document.getElementById(navId);
+  if (navEl) navEl.classList.add('active');
+
+  document.getElementById('page-title').textContent = page;
+  document.getElementById('page-content').innerHTML =
+    '<div class="loading"><div class="spinner"></div> 載入中...</div>';
+
+  closeSidebar();
+  loadPage(page);
+}
+
+// ── 首頁 ──
+function showHome() {
+  currentPage = null;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-home').classList.add('active');
+  document.getElementById('page-title').textContent = '首頁';
+  closeSidebar();
+
+  const pages = currentUser.pages || [];
+  const cards = pages.map(p => {
+    const def = PAGE_DEF[p] || {icon:'📄', desc:''};
+    return `
+      <div class="welcome-card" onclick="navigateTo('${p}')">
+        <div class="icon">${def.icon}</div>
+        <div class="title">${p}</div>
+        <div class="desc">${def.desc}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('page-content').innerHTML = `
+    <div class="content-header">
+      <h1>歡迎，${currentUser.name || ''} 👋</h1>
+      <p>角色：${currentUser.role} ／ 請選擇功能</p>
+    </div>
+    <div class="welcome-grid">${cards}</div>`;
+}
+
+// ── 載入頁面資料（各頁面由此擴充）──
+function loadPage(page) {
+  // 目前顯示「建置中」，各頁面後續一一建立
+  const def = PAGE_DEF[page] || {};
+  setTimeout(() => {
+    document.getElementById('page-content').innerHTML = `
+      <div class="content-header">
+        <h1>${def.icon || ''} ${page}</h1>
+        <p>${def.desc || ''}</p>
+      </div>
+      <div style="background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:40px;text-align:center;color:var(--mu)">
+        <div style="font-size:40px;margin-bottom:12px">🚧</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:6px">頁面建置中</div>
+        <div style="font-size:13px">此頁面功能即將上線</div>
+      </div>`;
+  }, 300);
+}
+
+// ── 登出 ──
+function signOut() {
+  google.accounts.id.disableAutoSelect();
+  currentUser = null;
+  idToken     = null;
+  document.getElementById('login-screen').style.display   = 'flex';
+  document.getElementById('pending-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display     = 'none';
+}
+
+// ── 手機選單 ──
+function toggleSidebar() {
+  const s = document.getElementById('sidebar');
+  const o = document.getElementById('overlay');
+  s.classList.toggle('open');
+  o.classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// ── 自動登入（如果已有 session）──
+window.onload = () => {
+  google.accounts.id.initialize({
+    client_id  : CLIENT_ID,
+    callback   : handleCredential,
+    auto_select: true,
+  });
+  google.accounts.id.prompt();
+};
+</script>
+</body>
+</html>
