@@ -230,7 +230,29 @@ body { background: var(--bg); color: var(--tx); font-family: 'Noto Sans TC', sys
   </div>
 </div>
 
-<!-- ② 等待審核畫面 -->
+<!-- ② 填寫姓名畫面（第一次登入）-->
+<div id="register-screen" style="display:none;min-height:100dvh;align-items:center;justify-content:center;">
+  <div class="pending-card">
+    <div class="pending-icon">👋</div>
+    <div class="pending-title">歡迎！請填寫姓名</div>
+    <div class="pending-sub">
+      請填寫您的姓名或暱稱，<br>
+      讓管理員知道是誰在申請帳號。
+    </div>
+    <div class="pending-email" id="register-email-txt"></div>
+    <input id="register-name-input" type="text" placeholder="請輸入姓名或暱稱"
+      style="width:100%;padding:12px 16px;border-radius:8px;border:1px solid var(--bd);
+             background:var(--s2);color:var(--tx);font-size:15px;margin:16px 0;outline:none;">
+    <button onclick="submitRegister()"
+      style="width:100%;padding:12px;background:var(--ac);color:#fff;border:none;
+             border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;">
+      送出申請
+    </button>
+    <button class="btn-logout" onclick="signOut()">取消登出</button>
+  </div>
+</div>
+
+<!-- ③ 等待審核畫面 -->
 <div id="pending-screen">
   <div class="pending-card">
     <div class="pending-icon">⏳</div>
@@ -363,6 +385,9 @@ function handleAuthResult(data) {
   if (data.status === 'approved') {
     currentUser = data;
     showApp();
+  } else if (data.status === 'new_user') {
+    // 第一次登入，需要填名字
+    showRegister(data.email);
   } else if (data.status === 'pending') {
     showPending(data.email);
   } else if (data.status === 'disabled') {
@@ -372,12 +397,41 @@ function handleAuthResult(data) {
   }
 }
 
+// ── 顯示填寫姓名畫面 ──
+function showRegister(email) {
+  document.getElementById('login-screen').style.display    = 'none';
+  document.getElementById('register-screen').style.display = 'flex';
+  document.getElementById('pending-screen').style.display  = 'none';
+  document.getElementById('app-screen').style.display      = 'none';
+  document.getElementById('register-email-txt').textContent = email;
+}
+
+// ── 送出姓名申請 ──
+async function submitRegister() {
+  const name = document.getElementById('register-name-input').value.trim();
+  if (!name) { alert('請填寫姓名或暱稱'); return; }
+  try {
+    const params = new URLSearchParams({token: idToken, name, action: 'register'});
+    const res    = await fetch(`${APPS_SCRIPT}?${params}`, {redirect: 'follow'});
+    const data   = await res.json();
+    if (data.status === 'pending') {
+      document.getElementById('register-screen').style.display = 'none';
+      showPending(data.email);
+    } else {
+      alert('送出失敗：' + (data.message || '請稍後再試'));
+    }
+  } catch(e) {
+    alert('連線失敗：' + e.message);
+  }
+}
+
 // ── 顯示各畫面 ──
 function showPending(email) {
-  document.getElementById('login-screen').style.display   = 'none';
-  document.getElementById('pending-screen').style.display = 'flex';
-  document.getElementById('app-screen').style.display     = 'none';
-  document.getElementById('pending-email-txt').textContent = email;
+  document.getElementById('login-screen').style.display    = 'none';
+  document.getElementById('register-screen').style.display = 'none';
+  document.getElementById('pending-screen').style.display  = 'flex';
+  document.getElementById('app-screen').style.display      = 'none';
+  document.getElementById('pending-email-txt').textContent  = email;
 }
 
 function showApp() {
@@ -495,9 +549,10 @@ function signOut() {
   google.accounts.id.disableAutoSelect();
   currentUser = null;
   idToken     = null;
-  document.getElementById('login-screen').style.display   = 'flex';
-  document.getElementById('pending-screen').style.display = 'none';
-  document.getElementById('app-screen').style.display     = 'none';
+  document.getElementById('login-screen').style.display    = 'flex';
+  document.getElementById('register-screen').style.display = 'none';
+  document.getElementById('pending-screen').style.display  = 'none';
+  document.getElementById('app-screen').style.display      = 'none';
 }
 
 // ── 手機選單 ──
