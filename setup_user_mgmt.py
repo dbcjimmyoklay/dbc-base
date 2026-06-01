@@ -24,9 +24,10 @@ def get_or_create(sh, title, rows=30, cols=20):
         return sh.add_worksheet(title=title, rows=rows, cols=cols)
 
 # ── 角色 ──
-# 老闆只使用 PORTAL（App），不需要進 Google Sheet，故不列入此表
+# Google Sheet：老闆/教練 不需要進 Google Sheet
 ROLES_GS     = ['系統創建者', '區主管', '野澤主管', '斑尾主管', '湯澤主管', '龍平主管', 'OP']
-ROLES_PORTAL = ['系統創建者', '老闆', '區主管', '野澤主管', '斑尾主管', '湯澤主管', '龍平主管', 'OP']
+# PORTAL：所有角色
+ROLES_PORTAL = ['系統創建者', '老闆', '區主管', '野澤主管', '斑尾主管', '湯澤主管', '龍平主管', 'OP', '教練']
 ROLES        = ROLES_PORTAL   # 使用者清單下拉用全角色
 
 E = '可編輯'
@@ -62,26 +63,24 @@ GS_PERMS = {
 # ═══════════════════════════════════════
 PORTAL_FEATURES = [
     '課程安排',
-    '野澤入住單', '斑尾入住單', '龍平入住單',
-    '野澤送客單', '斑尾送客單', '龍平送客單',
+    '入住單－野澤', '入住單－斑尾', '入住單－龍平',
+    '送客單－野澤', '送客單－斑尾', '送客單－龍平',
     '教練班表',
     '每日教練需求',
-    '銷量分析',
+    '銷量分析',     # 限定角色才能看
 ]
 P = 'O'   # 可查看
 N = 'X'   # 無權限
 
+# 銷量分析只有這4個角色能看，其他全部 P
+SALES_VIEW = {'系統創建者', '老闆', '區主管', 'OP'}
+
+def _portal(role):
+    # 前9個頁面全部都能看，第10個（銷量分析）只有特定角色
+    return [P]*9 + [P if role in SALES_VIEW else N]
+
 #                課  野入 斑入 龍入 野送 斑送 龍送 班表 教需 銷量
-PORTAL_PERMS = {
-    '系統創建者': [P,  P,   P,   P,   P,   P,   P,   P,   P,   P ],
-    '老闆'      : [P,  P,   P,   P,   P,   P,   P,   P,   P,   P ],
-    '區主管'    : [P,  P,   P,   P,   P,   P,   P,   P,   P,   P ],
-    '野澤主管'  : [P,  P,   N,   N,   P,   N,   N,   N,   P,   N ],
-    '斑尾主管'  : [P,  N,   P,   N,   N,   P,   N,   N,   P,   N ],
-    '湯澤主管'  : [P,  N,   N,   N,   N,   N,   N,   N,   P,   N ],
-    '龍平主管'  : [P,  N,   N,   P,   N,   N,   P,   N,   P,   N ],
-    'OP'        : [P,  P,   P,   P,   P,   P,   P,   P,   P,   P ],
-}
+PORTAL_PERMS = {r: _portal(r) for r in ROLES_PORTAL}
 
 
 def make_perm_sheet(sh, title, features, perms, roles, legend_e=None):
