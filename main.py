@@ -120,9 +120,10 @@ def run_agent(name, fn, *args, **kwargs):
 def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
     """
     每日自動流程：
-    CLEANER → WATCHER → ROOM → REPORTER → 完整大表.xlsx
+    CLEANER → COURSE → WATCHER → ROOM → REPORTER → 完整大表.xlsx
     """
     from agents.cleaner  import run as cleaner_run
+    from agents.course   import run as course_run
     from agents.watcher  import run as watcher_run
     from agents.room     import run as room_run
     from agents.reporter import run as reporter_run
@@ -138,28 +139,32 @@ def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
         print("\n⛔ CLEANER 失敗，中止後續流程")
         return results
 
-    # 2. WATCHER
+    # 2. COURSE（寫入課程安排）
+    ok, _, _ = run_agent('COURSE 課程安排寫入員', course_run, cleaner_output)
+    results['course'] = ok
+
+    # 3. WATCHER
     if not skip_watcher:
         ok, _, _ = run_agent('WATCHER 比對員', watcher_run, cleaner_output)
         results['watcher'] = ok
     else:
         print("\n  -- 略過 WATCHER --")
 
-    # 3. ROOM
+    # 4. ROOM
     if not skip_room:
         ok, _, _ = run_agent('ROOM 房務員', room_run, cleaner_output)
         results['room'] = ok
     else:
         print("\n  -- 略過 ROOM --")
 
-    # 4. REPORTER
+    # 5. REPORTER
     if not skip_reporter:
         ok, _, _ = run_agent('REPORTER 報表員', reporter_run, cleaner_output)
         results['reporter'] = ok
     else:
         print("\n  -- 略過 REPORTER --")
 
-    # 5. 完整大表.xlsx
+    # 6. 完整大表.xlsx
     print(f"\n{'─' * 50}")
     print("▶  完整大表.xlsx 輸出")
     print(f"{'─' * 50}")
