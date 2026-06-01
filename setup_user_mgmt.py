@@ -1,12 +1,12 @@
 """
 setup_user_mgmt.py
-設定「使用者管理」試算表（可重複執行，會覆蓋重建）
-  - 分頁1：使用者清單
-  - 分頁2：角色權限設定
+設定「使用者管理」試算表（可重複執行）
+  分頁1：使用者清單
+  分頁2：Google Sheet 權限  ← 誰能在 Google Sheet 編輯/看哪個分頁
+  分頁3：PORTAL 頁面權限    ← 誰能在 App 裡看到哪個功能頁面
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from shared.config import USER_MGMT_SPREADSHEET_ID
 from shared.gsheet import get_client, batch_update
 import gspread
@@ -15,135 +15,94 @@ def hex_to_rgb(h):
     h = h.lstrip('#')
     return {'red': int(h[0:2],16)/255, 'green': int(h[2:4],16)/255, 'blue': int(h[4:6],16)/255}
 
-# ── 角色清單（依截圖）──
-ROLES = ['系統創建者', '老闆', '區主管', '野澤主管', '斑尾主管', '湯澤主管', '龍平主管', 'OP']
+def get_or_create(sh, title, rows=30, cols=20):
+    try:
+        ws = sh.worksheet(title)
+        ws.clear()
+        return ws
+    except gspread.exceptions.WorksheetNotFound:
+        return sh.add_worksheet(title=title, rows=rows, cols=cols)
 
-# ── 功能欄位（依截圖欄位順序）──
-FEATURES = [
+# ── 角色 ──
+# 老闆只使用 PORTAL（App），不需要進 Google Sheet，故不列入此表
+ROLES_GS     = ['系統創建者', '區主管', '野澤主管', '斑尾主管', '湯澤主管', '龍平主管', 'OP']
+ROLES_PORTAL = ['系統創建者', '老闆', '區主管', '野澤主管', '斑尾主管', '湯澤主管', '龍平主管', 'OP']
+ROLES        = ROLES_PORTAL   # 使用者清單下拉用全角色
+
+E = '可編輯'
+V = '只能檢視'
+X = '✗'
+
+# ═══════════════════════════════════════
+# 分頁2：Google Sheet 權限
+# 定義：誰可以在 Google Sheet 直接操作哪個分頁
+# ═══════════════════════════════════════
+GS_FEATURES = [
     '課程安排', '房務表', '異動紀錄',
     '野澤入住單', '斑尾入住單', '龍平入住單',
     '野澤送客單', '斑尾送客單', '龍平送客單',
     '長野車單', '龍平車單',
-    '教練需求報表', '銷量分析報表', '教練班表',
+    '教練班表',
 ]
-
-E = '可編輯'   # can edit
-V = '只能檢視'  # view only
-X = '✗'        # no access
-
-# ── 權限矩陣（依截圖）──
-ROLE_PERMS = {
-    '系統創建者': [E, E, E,  E, E, E,  E, E, E,  E, E,  E, E, E],
-    '老闆'      : [V, V, V,  V, V, V,  V, V, V,  V, V,  V, V, V],
-    '區主管'    : [E, V, E,  V, V, V,  V, V, V,  V, V,  V, V, E],
-    '野澤主管'  : [E, V, V,  E, V, V,  E, V, V,  V, V,  V, X, X],
-    '斑尾主管'  : [V, V, V,  V, E, V,  V, E, V,  V, V,  V, X, X],
-    '湯澤主管'  : [V, V, V,  V, V, V,  V, V, V,  V, V,  V, X, X],
-    '龍平主管'  : [V, V, V,  V, V, E,  V, V, E,  V, E,  V, X, X],
-    'OP'        : [V, V, V,  V, V, V,  V, V, V,  E, E,  V, V, V],
+#                課  房  異  野入 斑入 龍入 野送 斑送 龍送 長車 龍車 班表
+GS_PERMS = {
+    '系統創建者': [E,  E,  E,  E,   E,   E,   E,   E,   E,   E,   E,   E ],
+    '區主管'    : [E,  V,  E,  V,   V,   V,   V,   V,   V,   V,   V,   E ],
+    '野澤主管'  : [V,  V,  V,  E,   V,   V,   E,   V,   V,   V,   V,   X ],
+    '斑尾主管'  : [V,  V,  V,  V,   E,   V,   V,   E,   V,   V,   V,   X ],
+    '湯澤主管'  : [V,  V,  V,  V,   V,   V,   V,   V,   V,   V,   V,   X ],
+    '龍平主管'  : [V,  V,  V,  V,   V,   E,   V,   V,   E,   V,   E,   X ],
+    'OP'        : [V,  V,  V,  V,   V,   V,   V,   V,   V,   E,   E,   X ],
 }
 
-def run():
-    gc = get_client()
-    sh = gc.open_by_key(USER_MGMT_SPREADSHEET_ID)
+# ═══════════════════════════════════════
+# 分頁3：PORTAL 頁面權限
+# 定義：誰能在 App 裡看到哪個功能頁面
+# （全部都是「看」，沒有編輯，因為編輯在 Google Sheet）
+# ═══════════════════════════════════════
+PORTAL_FEATURES = [
+    '課程安排',
+    '房務表',
+    '異動紀錄',
+    '野澤入住單', '斑尾入住單', '龍平入住單',
+    '野澤送客單', '斑尾送客單', '龍平送客單',
+    '長野車單', '龍平車單',
+    '教練班表',
+    '每日教練需求',   # HTML 報表頁面
+    '銷量分析',       # HTML 報表頁面
+]
+P = 'O'   # 可查看（圓圈）
+N = 'X'   # 無權限（叉）
 
-    # ═══════════════════════════════════════
-    # 分頁1：使用者清單
-    # ═══════════════════════════════════════
-    try:
-        ws1 = sh.worksheet('使用者清單')
-    except gspread.exceptions.WorksheetNotFound:
-        try:
-            ws1 = sh.worksheet('工作表1')
-            ws1.update_title('使用者清單')
-        except:
-            ws1 = sh.add_worksheet(title='使用者清單', rows=300, cols=10)
-    print("設定 分頁1：使用者清單...")
+PORTAL_PERMS = {
+    #               課  房  異  野入 斑入 龍入 野送 斑送 龍送 長車 龍車 班表 教練 銷量
+    '系統創建者': [P,  P,  P,  P,   P,   P,   P,   P,   P,   P,   P,   P,   P,   P ],
+    '老闆'      : [P,  P,  P,  P,   P,   P,   P,   P,   P,   P,   P,   P,   P,   P ],
+    '區主管'    : [P,  P,  P,  P,   P,   P,   P,   P,   P,   P,   P,   P,   P,   P ],
+    '野澤主管'  : [P,  P,  N,  P,   N,   N,   P,   N,   N,   P,   N,   N,   P,   N ],
+    '斑尾主管'  : [P,  P,  N,  N,   P,   N,   N,   P,   N,   P,   N,   N,   P,   N ],
+    '湯澤主管'  : [P,  P,  N,  N,   N,   N,   N,   N,   N,   N,   N,   N,   P,   N ],
+    '龍平主管'  : [P,  P,  N,  N,   N,   P,   N,   N,   P,   N,   P,   N,   P,   N ],
+    'OP'        : [P,  P,  P,  P,   P,   P,   P,   P,   P,   P,   P,   P,   P,   P ],
+}
 
-    USERS_HEADERS = ['Email', '姓名', '角色', '狀態', '申請時間', '核准時間', '核准者', '備註']
-    ws1.clear()
-    ws1.update([USERS_HEADERS], 'A1', value_input_option='RAW')
-    sid1 = ws1.id
+
+def make_perm_sheet(sh, title, features, perms, roles, legend_e=None):
+    """建立一張權限分頁"""
+    ws  = get_or_create(sh, title)
+    sid = ws.id
+
+    header_row = ['角色 \\ 功能'] + features
+    data_rows  = [header_row]
+    for role in roles:
+        data_rows.append([role] + perms[role])
+    ws.update(data_rows, 'A1', value_input_option='RAW')
+
     reqs = []
 
     # 標題列
     reqs.append({'repeatCell': {
-        'range': {'sheetId': sid1, 'startRowIndex': 0, 'endRowIndex': 1,
-                  'startColumnIndex': 0, 'endColumnIndex': len(USERS_HEADERS)},
-        'cell': {'userEnteredFormat': {
-            'backgroundColor': hex_to_rgb('#1a1a2e'),
-            'textFormat': {'foregroundColor': {'red':1,'green':1,'blue':1}, 'bold': True},
-            'horizontalAlignment': 'CENTER',
-        }},
-        'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)',
-    }})
-
-    # 角色下拉
-    reqs.append({'setDataValidation': {
-        'range': {'sheetId': sid1, 'startRowIndex': 1, 'endRowIndex': 300,
-                  'startColumnIndex': 2, 'endColumnIndex': 3},
-        'rule': {
-            'condition': {'type': 'ONE_OF_LIST',
-                          'values': [{'userEnteredValue': r} for r in ROLES]},
-            'showCustomUi': True, 'strict': True,
-        }
-    }})
-
-    # 狀態下拉
-    reqs.append({'setDataValidation': {
-        'range': {'sheetId': sid1, 'startRowIndex': 1, 'endRowIndex': 300,
-                  'startColumnIndex': 3, 'endColumnIndex': 4},
-        'rule': {
-            'condition': {'type': 'ONE_OF_LIST',
-                          'values': [{'userEnteredValue': s} for s in ['待審核', '核准', '停用']]},
-            'showCustomUi': True, 'strict': True,
-        }
-    }})
-
-    # 狀態條件填色
-    for status, color in [('核准','#d9ead3'), ('待審核','#fff2cc'), ('停用','#f4cccc')]:
-        reqs.append({'addConditionalFormatRule': {
-            'rule': {
-                'ranges': [{'sheetId': sid1, 'startRowIndex': 1, 'endRowIndex': 300,
-                            'startColumnIndex': 3, 'endColumnIndex': 4}],
-                'booleanRule': {
-                    'condition': {'type': 'TEXT_EQ', 'values': [{'userEnteredValue': status}]},
-                    'format': {'backgroundColor': hex_to_rgb(color)},
-                }
-            }, 'index': 0,
-        }})
-
-    # 欄寬
-    for ci, px in enumerate([230, 100, 100, 80, 140, 140, 80, 200]):
-        reqs.append({'updateDimensionProperties': {
-            'range': {'sheetId': sid1, 'dimension': 'COLUMNS', 'startIndex': ci, 'endIndex': ci+1},
-            'properties': {'pixelSize': px}, 'fields': 'pixelSize',
-        }})
-
-    ws1.freeze(rows=1)
-    print("  OK")
-
-    # ═══════════════════════════════════════
-    # 分頁2：角色權限設定
-    # ═══════════════════════════════════════
-    try:
-        ws2 = sh.worksheet('角色權限設定')
-        ws2.clear()
-    except gspread.exceptions.WorksheetNotFound:
-        ws2 = sh.add_worksheet(title='角色權限設定', rows=20, cols=20)
-    print("設定 分頁2：角色權限設定...")
-
-    header_row = ['角色 \\ 功能'] + FEATURES
-    data_rows  = [header_row]
-    for role in ROLES:
-        data_rows.append([role] + ROLE_PERMS[role])
-
-    ws2.update(data_rows, 'A1', value_input_option='RAW')
-    sid2 = ws2.id
-
-    # 標題列
-    reqs.append({'repeatCell': {
-        'range': {'sheetId': sid2, 'startRowIndex': 0, 'endRowIndex': 1,
+        'range': {'sheetId': sid, 'startRowIndex': 0, 'endRowIndex': 1,
                   'startColumnIndex': 0, 'endColumnIndex': len(header_row)},
         'cell': {'userEnteredFormat': {
             'backgroundColor': hex_to_rgb('#1a1a2e'),
@@ -153,9 +112,9 @@ def run():
         'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)',
     }})
 
-    # 角色欄（A欄）
+    # 角色欄
     reqs.append({'repeatCell': {
-        'range': {'sheetId': sid2, 'startRowIndex': 1, 'endRowIndex': len(data_rows),
+        'range': {'sheetId': sid, 'startRowIndex': 1, 'endRowIndex': len(data_rows),
                   'startColumnIndex': 0, 'endColumnIndex': 1},
         'cell': {'userEnteredFormat': {
             'textFormat': {'bold': True},
@@ -165,12 +124,20 @@ def run():
     }})
 
     # 條件填色
-    for symbol, color in [(E,'#d9ead3'), (V,'#e8f0fe'), (X,'#f4cccc')]:
+    if legend_e:
+        # Google Sheet：可編輯=綠, 只能檢視=藍, ✗=紅
+        color_map = [('可編輯','#d9ead3'), ('只能檢視','#e8f0fe'), ('✗','#f4cccc')]
+    else:
+        # PORTAL：O=綠, X=灰
+        color_map = [('O','#d9ead3'), ('X','#f3f3f3')]
+
+    for symbol, color in color_map:
         reqs.append({'addConditionalFormatRule': {
             'rule': {
-                'ranges': [{'sheetId': sid2, 'startRowIndex': 1,
+                'ranges': [{'sheetId': sid, 'startRowIndex': 1,
                             'endRowIndex': len(data_rows),
-                            'startColumnIndex': 1, 'endColumnIndex': len(header_row)}],
+                            'startColumnIndex': 1,
+                            'endColumnIndex': len(header_row)}],
                 'booleanRule': {
                     'condition': {'type': 'TEXT_EQ', 'values': [{'userEnteredValue': symbol}]},
                     'format': {'backgroundColor': hex_to_rgb(color)},
@@ -180,7 +147,7 @@ def run():
 
     # 格線
     reqs.append({'updateBorders': {
-        'range': {'sheetId': sid2, 'startRowIndex': 0, 'endRowIndex': len(data_rows),
+        'range': {'sheetId': sid, 'startRowIndex': 0, 'endRowIndex': len(data_rows),
                   'startColumnIndex': 0, 'endColumnIndex': len(header_row)},
         'top':    {'style':'SOLID','colorStyle':{'rgbColor':hex_to_rgb('#cccccc')}},
         'bottom': {'style':'SOLID','colorStyle':{'rgbColor':hex_to_rgb('#cccccc')}},
@@ -192,38 +159,130 @@ def run():
 
     # 置中（權限欄）
     reqs.append({'repeatCell': {
-        'range': {'sheetId': sid2, 'startRowIndex': 0, 'endRowIndex': len(data_rows),
+        'range': {'sheetId': sid, 'startRowIndex': 0, 'endRowIndex': len(data_rows),
                   'startColumnIndex': 1, 'endColumnIndex': len(header_row)},
-        'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER', 'verticalAlignment': 'MIDDLE'}},
+        'cell': {'userEnteredFormat': {
+            'horizontalAlignment': 'CENTER', 'verticalAlignment': 'MIDDLE',
+        }},
         'fields': 'userEnteredFormat(horizontalAlignment,verticalAlignment)',
     }})
 
     # 欄寬
     reqs.append({'updateDimensionProperties': {
-        'range': {'sheetId': sid2, 'dimension': 'COLUMNS', 'startIndex': 0, 'endIndex': 1},
+        'range': {'sheetId': sid, 'dimension': 'COLUMNS', 'startIndex': 0, 'endIndex': 1},
         'properties': {'pixelSize': 115}, 'fields': 'pixelSize',
     }})
     for ci in range(1, len(header_row)):
         reqs.append({'updateDimensionProperties': {
-            'range': {'sheetId': sid2, 'dimension': 'COLUMNS', 'startIndex': ci, 'endIndex': ci+1},
-            'properties': {'pixelSize': 78}, 'fields': 'pixelSize',
+            'range': {'sheetId': sid, 'dimension': 'COLUMNS',
+                      'startIndex': ci, 'endIndex': ci+1},
+            'properties': {'pixelSize': 75}, 'fields': 'pixelSize',
         }})
 
     # 列高
     for ri in range(len(data_rows)):
         reqs.append({'updateDimensionProperties': {
-            'range': {'sheetId': sid2, 'dimension': 'ROWS', 'startIndex': ri, 'endIndex': ri+1},
+            'range': {'sheetId': sid, 'dimension': 'ROWS',
+                      'startIndex': ri, 'endIndex': ri+1},
             'properties': {'pixelSize': 28}, 'fields': 'pixelSize',
         }})
 
-    ws2.freeze(rows=1, cols=1)
+    ws.freeze(rows=1, cols=1)
+    batch_update(sh, reqs)
+    return ws
 
-    # 批次送出
-    for i in range(0, len(reqs), 500):
-        sh.batch_update({'requests': reqs[i:i+500]})
 
+def run():
+    gc = get_client()
+    sh = gc.open_by_key(USER_MGMT_SPREADSHEET_ID)
+
+    # ── 分頁1：使用者清單 ──
+    try:
+        ws1 = sh.worksheet('使用者清單')
+    except gspread.exceptions.WorksheetNotFound:
+        try:
+            ws1 = sh.worksheet('工作表1')
+            ws1.update_title('使用者清單')
+        except:
+            ws1 = sh.add_worksheet(title='使用者清單', rows=300, cols=10)
+    ws1.clear()
+    print("設定 分頁1：使用者清單...")
+
+    USERS_HEADERS = ['Email', '姓名', '角色', '狀態', '申請時間', '核准時間', '核准者', '備註']
+    ws1.update([USERS_HEADERS], 'A1', value_input_option='RAW')
+    sid1  = ws1.id
+    reqs1 = []
+
+    reqs1.append({'repeatCell': {
+        'range': {'sheetId': sid1, 'startRowIndex': 0, 'endRowIndex': 1,
+                  'startColumnIndex': 0, 'endColumnIndex': len(USERS_HEADERS)},
+        'cell': {'userEnteredFormat': {
+            'backgroundColor': hex_to_rgb('#1a1a2e'),
+            'textFormat': {'foregroundColor': {'red':1,'green':1,'blue':1}, 'bold': True},
+            'horizontalAlignment': 'CENTER',
+        }},
+        'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)',
+    }})
+    reqs1.append({'setDataValidation': {
+        'range': {'sheetId': sid1, 'startRowIndex': 1, 'endRowIndex': 300,
+                  'startColumnIndex': 2, 'endColumnIndex': 3},
+        'rule': {'condition': {'type': 'ONE_OF_LIST',
+                               'values': [{'userEnteredValue': r} for r in ROLES]},
+                 'showCustomUi': True, 'strict': True}
+    }})
+    reqs1.append({'setDataValidation': {
+        'range': {'sheetId': sid1, 'startRowIndex': 1, 'endRowIndex': 300,
+                  'startColumnIndex': 3, 'endColumnIndex': 4},
+        'rule': {'condition': {'type': 'ONE_OF_LIST',
+                               'values': [{'userEnteredValue': s}
+                                          for s in ['待審核','核准','停用']]},
+                 'showCustomUi': True, 'strict': True}
+    }})
+    for status, color in [('核准','#d9ead3'),('待審核','#fff2cc'),('停用','#f4cccc')]:
+        reqs1.append({'addConditionalFormatRule': {
+            'rule': {
+                'ranges': [{'sheetId': sid1, 'startRowIndex': 1, 'endRowIndex': 300,
+                            'startColumnIndex': 3, 'endColumnIndex': 4}],
+                'booleanRule': {
+                    'condition': {'type': 'TEXT_EQ', 'values': [{'userEnteredValue': status}]},
+                    'format': {'backgroundColor': hex_to_rgb(color)},
+                }
+            }, 'index': 0,
+        }})
+    for ci, px in enumerate([230, 100, 100, 80, 140, 140, 80, 200]):
+        reqs1.append({'updateDimensionProperties': {
+            'range': {'sheetId': sid1, 'dimension': 'COLUMNS',
+                      'startIndex': ci, 'endIndex': ci+1},
+            'properties': {'pixelSize': px}, 'fields': 'pixelSize',
+        }})
+    ws1.freeze(rows=1)
+    batch_update(sh, reqs1)
     print("  OK")
+
+    # ── 分頁2：Google Sheet 權限 ──
+    print("設定 分頁2：Google Sheet 權限...")
+    make_perm_sheet(sh, 'Google Sheet 權限', GS_FEATURES, GS_PERMS,
+                    roles=ROLES_GS, legend_e=True)
+    print("  OK")
+
+    # ── 分頁3：PORTAL 頁面權限 ──
+    print("設定 分頁3：PORTAL 頁面權限...")
+    make_perm_sheet(sh, 'PORTAL 頁面權限', PORTAL_FEATURES, PORTAL_PERMS,
+                    roles=ROLES_PORTAL, legend_e=False)
+    print("  OK")
+
+    # 舊分頁「角色權限設定」如果還在就刪掉
+    try:
+        old = sh.worksheet('角色權限設定')
+        sh.del_worksheet(old)
+        print("  已移除舊分頁「角色權限設定」")
+    except:
+        pass
+
     print("\n完成！")
+    print("  分頁1：使用者清單（管理帳號/角色/審核）")
+    print("  分頁2：Google Sheet 權限（可編輯 / 只能檢視 / X）")
+    print("  分頁3：PORTAL 頁面權限（O=可看 / X=無權限）")
 
 if __name__ == '__main__':
     run()
