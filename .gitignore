@@ -1,0 +1,15 @@
+﻿# 憑證與個資（絕對不上傳）
+dbc-credentials.json
+完整大表.xlsx
+cleaner_output.pkl
+原始大總表*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# 報表（每次重新產生）
+dbc_coach_report.html
+dbc_sales_report.html

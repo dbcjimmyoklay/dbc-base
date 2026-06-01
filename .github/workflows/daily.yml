@@ -1,0 +1,67 @@
+name: DBC 每日自動執行
+
+on:
+  # 每天 09:00 台灣時間（= UTC 01:00）自動執行
+  schedule:
+    - cron: '0 1 * * *'
+
+  # 也可以在 GitHub 網頁上手動觸發
+  workflow_dispatch:
+    inputs:
+      skip_watcher:
+        description: '略過 WATCHER 比對員'
+        type: boolean
+        default: false
+      skip_room:
+        description: '略過 ROOM 房務員'
+        type: boolean
+        default: false
+      skip_reporter:
+        description: '略過 REPORTER 報表員'
+        type: boolean
+        default: false
+
+jobs:
+  daily-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. 取得程式碼
+      - name: Checkout 程式碼
+        uses: actions/checkout@v4
+
+      # 2. 設定 Python
+      - name: 設定 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # 3. 安裝套件
+      - name: 安裝 Python 套件
+        run: pip install -r requirements.txt
+
+      # 4. 建立 Google 憑證檔（從 GitHub Secret）
+      - name: 建立 Google 憑證
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > dbc-credentials.json
+
+      # 5. 執行每日流程
+      - name: 執行 DBC 每日流程
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.skip_watcher }}" = "true" ]; then ARGS="$ARGS --skip-watcher"; fi
+          if [ "${{ github.event.inputs.skip_room }}"   = "true" ]; then ARGS="$ARGS --skip-room";    fi
+          if [ "${{ github.event.inputs.skip_reporter }}" = "true" ]; then ARGS="$ARGS --skip-reporter"; fi
+          python main.py $ARGS
+
+      # 6. 上傳報表到 GitHub Artifacts（可下載查看，保留7天）
+      - name: 上傳報表
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbc-reports-${{ github.run_number }}
+          path: |
+            dbc_coach_report.html
+            dbc_sales_report.html
+          retention-days: 7
