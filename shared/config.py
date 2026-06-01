@@ -22,11 +22,31 @@ SHEET_COURSE  = '課程安排26/27'
 SHEET_ROOM    = '房務表26/27'
 SHEET_CHANGE  = '異動紀錄'
 
-# ===== Google Sheets — 野澤當地訂房（獨立試算表）=====
+# 入住單（gid 已在 CHECKIN_SHEETS 定義）
+# 送客單
+CHECKOUT_SHEETS = [
+    {'name': '野澤送客單26/27', 'include': lambda item: '野澤' in item and '純課' not in item},
+    {'name': '斑尾送客單26/27', 'include': lambda item: '斑尾' in item and '純課' not in item},
+    {'name': '龍平送客單26/27', 'include': lambda item: '龍平' in item},
+]
+
+# 車單
+SHEET_NAGANO_BUS = '長野車單'
+SHEET_RYONGPYONG_BUS = '龍平車單'
+
+# ===== Google Sheets — 野澤當地訂房（獨立）=====
 NOZAWA_BOOKING_SPREADSHEET_ID = '1eNXXQgCEqHxd2VmzbGe3Z-Gac2PNBgQlSAKx19uqQ6s'
-NOZAWA_BOOKING_SHEET          = '26-27'       # 當季分頁名稱
-NOZAWA_BOOKING_GID            = 2053936646    # 當季分頁 gid
-NOZAWA_COMPARE_SHEET          = '比對報告'    # WATCHER 寫入的比對報告分頁
+NOZAWA_BOOKING_SHEET          = '26-27'
+NOZAWA_BOOKING_GID            = 2053936646
+NOZAWA_COMPARE_SHEET          = '比對報告'
+
+# ===== Google Sheets — 教練班表（獨立）=====
+COACH_SCHEDULE_SPREADSHEET_ID = '1UsOty8fY5FZ5duOYLscMDYFH_lsKTfDhmuk_n3VU9B8'
+COACH_SCHEDULE_SHEET          = '26/27 教練班表'   # 當季分頁名稱
+
+# ===== Google Sheets — 使用者管理（獨立）=====
+USER_MGMT_SPREADSHEET_ID = '1b2YR6VpDT_KYOExWLw0Gsy9D0Ise-kBcKtVDW8zrfPM'
+USER_MGMT_SHEET          = '工作表1'   # 之後可改名
 
 CHECKIN_SHEETS = [
     {
