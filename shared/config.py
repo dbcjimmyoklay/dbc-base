@@ -13,7 +13,7 @@ CREDS_PATH = os.path.join(BASE_DIR, 'dbc-credentials.json')
 # 你放置「原始大總表*.xlsx」的 Drive 資料夾 ID
 # 開啟資料夾網址後，最後一段路徑就是 ID
 # 例：https://drive.google.com/drive/folders/1ABC...XYZ → ID = 1ABC...XYZ
-DRIVE_XLSX_FOLDER_ID = ''   # ← 填入你的資料夾 ID
+DRIVE_XLSX_FOLDER_ID = '1futMHPcOQ4-HeLbKxNoBRarSPycKbZDG'
 
 # ===== Google Sheets — DBC Base（主表）=====
 SPREADSHEET_ID = '12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc'
