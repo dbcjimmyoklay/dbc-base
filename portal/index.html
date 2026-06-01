@@ -344,13 +344,12 @@ function handleCredential(response) {
   verifyWithServer(idToken, name);
 }
 
-// ── 呼叫 Apps Script 驗證 ──
+// ── 呼叫 Apps Script 驗證（GET 避免 CORS preflight）──
 async function verifyWithServer(token, name) {
   try {
-    const res = await fetch(APPS_SCRIPT, {
-      method : 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body   : JSON.stringify({token, name}),
+    const params = new URLSearchParams({token, name});
+    const res    = await fetch(`${APPS_SCRIPT}?${params}`, {
+      redirect: 'follow',
     });
     const data = await res.json();
     handleAuthResult(data);
