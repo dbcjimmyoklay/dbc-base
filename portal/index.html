@@ -2,578 +2,598 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0a0f1e">
-<title>DBC 系統</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000b18">
+<title>DBC</title>
 <link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ── 基礎 ── */
 :root {
-  --bg:     #0a0f1e;
-  --s1:     #111827;
-  --s2:     #1a2235;
-  --bd:     #1e2d45;
-  --ac:     #3b82f6;
-  --tx:     #e2e8f0;
-  --mu:     #64748b;
-  --green:  #10b981;
-  --yellow: #f59e0b;
-  --red:    #ef4444;
-  --nav-w:  240px;
+  --bg0:    #000b18;   /* 最深底色 */
+  --bg1:    #001529;   /* 側欄 */
+  --bg2:    #001f3d;   /* 卡片 */
+  --bg3:    #002a52;   /* hover */
+  --bd:     #0a3260;   /* 邊框 */
+  --bd2:    #0d3d75;   /* 淺邊框 */
+  --tx:     #ffffff;   /* 主文字 */
+  --tx2:    #8aadcc;   /* 次文字 */
+  --tx3:    #4a7299;   /* 說明文字 */
+  --ac:     #1a6fb5;   /* 藍色強調 */
+  --ac2:    #2489d6;   /* 亮藍 */
+  --nav-w:  220px;
+  --top-h:  52px;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--tx); font-family: 'Noto Sans TC', system-ui, sans-serif; min-height: 100dvh; }
 
-/* ── 登入頁 ── */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg0);
+  color: var(--tx);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ════════════════════════════════
+   LOGO SVG
+════════════════════════════════ */
+.dbc-logo svg { width: 96px; height: auto; display: block; }
+
+/* ════════════════════════════════
+   LOGIN
+════════════════════════════════ */
 #login-screen {
   min-height: 100dvh;
   display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(ellipse at 60% 40%, #1e3a5f 0%, #0a0f1e 70%);
+  background: var(--bg0);
+  position: relative; overflow: hidden;
+}
+#login-screen::before {
+  content: '';
+  position: absolute; top: -30%; left: -10%;
+  width: 70%; height: 70%;
+  background: radial-gradient(ellipse, rgba(26,111,181,.12) 0%, transparent 70%);
+  pointer-events: none;
 }
 .login-card {
-  background: var(--s1);
+  position: relative; z-index: 1;
+  width: 380px; max-width: 92vw;
+  padding: 48px 40px 40px;
+  background: var(--bg1);
   border: 1px solid var(--bd);
   border-radius: 16px;
+}
+.login-logo { margin-bottom: 32px; }
+.login-divider {
+  height: 1px; background: var(--bd);
+  margin: 28px 0;
+}
+.login-title { font-size: 20px; font-weight: 600; letter-spacing: -.3px; margin-bottom: 6px; }
+.login-sub { font-size: 13px; color: var(--tx2); margin-bottom: 28px; }
+.g-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 13px 20px;
+  background: var(--tx); color: #1a1a1a;
+  border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 500; letter-spacing: -.1px;
+  cursor: pointer; transition: opacity .15s;
+}
+.g-btn:hover { opacity: .9; }
+.g-btn img { width: 18px; height: 18px; }
+
+/* ════════════════════════════════
+   REGISTER / PENDING
+════════════════════════════════ */
+.center-screen {
+  min-height: 100dvh; display: none;
+  align-items: center; justify-content: center;
+  background: var(--bg0);
+}
+.center-card {
+  width: 400px; max-width: 92vw;
   padding: 48px 40px;
+  background: var(--bg1);
+  border: 1px solid var(--bd);
+  border-radius: 16px;
   text-align: center;
-  width: 360px;
-  max-width: 90vw;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5);
 }
-.login-logo { font-size: 40px; margin-bottom: 12px; }
-.login-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-.login-sub { font-size: 13px; color: var(--mu); margin-bottom: 32px; }
-.g-signin-btn {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  width: 100%; padding: 13px 20px;
-  background: #fff; color: #3c4043;
-  border: none; border-radius: 8px;
-  font-size: 15px; font-weight: 500;
-  cursor: pointer; transition: box-shadow .2s;
+.status-icon {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: var(--bg2); border: 1px solid var(--bd2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; margin: 0 auto 20px;
 }
-.g-signin-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-.g-signin-btn img { width: 20px; height: 20px; }
+.center-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.center-sub { font-size: 13px; color: var(--tx2); line-height: 1.7; margin-bottom: 20px; }
+.email-badge {
+  display: inline-block;
+  background: var(--bg2); border: 1px solid var(--bd2);
+  border-radius: 6px; padding: 6px 14px;
+  font-size: 12px; color: var(--ac2);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  margin-bottom: 24px; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.input-field {
+  width: 100%; padding: 12px 16px;
+  background: var(--bg0); border: 1px solid var(--bd2);
+  border-radius: 10px; color: var(--tx);
+  font-size: 14px; font-family: inherit;
+  outline: none; transition: border-color .15s;
+  margin-bottom: 14px;
+}
+.input-field:focus { border-color: var(--ac2); }
+.input-field::placeholder { color: var(--tx3); }
+.btn-primary {
+  width: 100%; padding: 13px;
+  background: var(--tx); color: #0a1628;
+  border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s;
+  margin-bottom: 10px;
+}
+.btn-primary:hover { opacity: .9; }
+.btn-ghost {
+  width: 100%; padding: 11px;
+  background: transparent; color: var(--tx3);
+  border: 1px solid var(--bd); border-radius: 10px;
+  font-size: 13px; cursor: pointer;
+  transition: all .15s;
+}
+.btn-ghost:hover { color: var(--tx2); border-color: var(--bd2); }
 
-/* ── 等待審核頁 ── */
-#pending-screen {
-  min-height: 100dvh;
-  display: none; align-items: center; justify-content: center;
-}
-.pending-card {
-  background: var(--s1); border: 1px solid var(--bd);
-  border-radius: 16px; padding: 48px 40px;
-  text-align: center; width: 400px; max-width: 90vw;
-}
-.pending-icon { font-size: 48px; margin-bottom: 16px; }
-.pending-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
-.pending-sub { font-size: 14px; color: var(--mu); line-height: 1.6; margin-bottom: 24px; }
-.pending-email {
-  background: var(--s2); border: 1px solid var(--bd);
-  border-radius: 8px; padding: 10px 16px;
-  font-size: 13px; color: var(--ac); margin-bottom: 24px;
-}
-.btn-logout {
-  background: transparent; border: 1px solid var(--bd);
-  color: var(--mu); border-radius: 8px;
-  padding: 10px 20px; font-size: 13px; cursor: pointer;
-  transition: all .2s;
-}
-.btn-logout:hover { border-color: var(--red); color: var(--red); }
+/* ════════════════════════════════
+   APP SHELL
+════════════════════════════════ */
+#app-screen { display: none; }
 
-/* ── 主畫面 ── */
-#app-screen { display: none; min-height: 100dvh; }
-
-/* 側邊欄（桌面）*/
+/* Sidebar */
 .sidebar {
-  position: fixed; top: 0; left: 0; bottom: 0;
+  position: fixed; inset: 0 auto 0 0;
   width: var(--nav-w);
-  background: var(--s1); border-right: 1px solid var(--bd);
+  background: var(--bg1);
+  border-right: 1px solid var(--bd);
   display: flex; flex-direction: column;
-  z-index: 100; transition: transform .25s;
+  z-index: 200; transition: transform .22s cubic-bezier(.4,0,.2,1);
 }
-.sidebar-logo {
-  padding: 20px 20px 16px;
+.sb-header {
+  padding: 20px 16px 16px;
   border-bottom: 1px solid var(--bd);
   display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
 }
-.sidebar-logo .logo-i {
-  width: 34px; height: 34px; background: var(--ac);
-  border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  font-size: 18px; flex-shrink: 0;
+.sb-logo { flex: 1; }
+.sb-logo svg { width: 72px; height: auto; }
+.sb-nav {
+  flex: 1; overflow-y: auto; padding: 8px 0;
+  scrollbar-width: none;
 }
-.sidebar-logo .logo-t { font-size: 15px; font-weight: 700; line-height: 1.2; }
-.sidebar-logo .logo-s { font-size: 10px; color: var(--mu); }
+.sb-nav::-webkit-scrollbar { display: none; }
 
-.nav-section { padding: 10px 12px 4px; font-size: 10px; color: var(--mu); text-transform: uppercase; letter-spacing: 1px; }
+.nav-section-label {
+  padding: 12px 16px 4px;
+  font-size: 10px; font-weight: 600;
+  color: var(--tx3); text-transform: uppercase; letter-spacing: 1.2px;
+}
 .nav-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px; margin: 2px 8px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; margin: 1px 8px;
   border-radius: 8px; cursor: pointer;
-  font-size: 14px; color: var(--mu);
-  transition: all .15s; text-decoration: none;
+  font-size: 13.5px; font-weight: 400; color: var(--tx2);
+  transition: all .15s; user-select: none;
 }
-.nav-item:hover { background: var(--s2); color: var(--tx); }
-.nav-item.active { background: rgba(59,130,246,.15); color: var(--ac); font-weight: 500; }
-.nav-item .icon { width: 18px; text-align: center; flex-shrink: 0; }
-
-/* 子選單 */
-.nav-sub { padding-left: 12px; }
-.nav-sub .nav-item { font-size: 13px; padding: 8px 12px; }
-
-.sidebar-bottom {
-  margin-top: auto; padding: 12px;
-  border-top: 1px solid var(--bd);
+.nav-item:hover { background: var(--bg3); color: var(--tx); }
+.nav-item.active {
+  background: rgba(26,111,181,.2);
+  color: #60b3f4;
+  font-weight: 500;
 }
-.user-info {
+.nav-icon {
+  width: 16px; height: 16px; flex-shrink: 0;
+  opacity: .7;
+}
+.nav-item.active .nav-icon { opacity: 1; }
+
+/* Sub nav */
+.nav-sub .nav-item {
+  padding: 8px 12px 8px 20px;
+  font-size: 13px; margin: 0 8px 1px;
+}
+
+/* Sidebar bottom */
+.sb-bottom {
+  padding: 12px; border-top: 1px solid var(--bd); flex-shrink: 0;
+}
+.user-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 8px;
-  background: var(--s2);
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--bg2); margin-bottom: 8px;
 }
-.user-avatar {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: var(--ac); display: flex; align-items: center;
-  justify-content: center; font-weight: 700; font-size: 14px;
-  flex-shrink: 0; overflow: hidden;
+.user-av {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--ac); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+  overflow: hidden;
 }
-.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.user-name { font-size: 13px; font-weight: 500; }
-.user-role { font-size: 11px; color: var(--mu); }
-.btn-signout {
-  width: 100%; margin-top: 8px; padding: 8px;
-  background: transparent; border: 1px solid var(--bd);
-  color: var(--mu); border-radius: 6px;
-  font-size: 12px; cursor: pointer; transition: all .2s;
+.user-av img { width: 100%; height: 100%; object-fit: cover; }
+.user-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role { font-size: 11px; color: var(--tx3); white-space: nowrap; }
+.btn-out {
+  width: 100%; padding: 8px;
+  background: transparent; color: var(--tx3);
+  border: 1px solid var(--bd); border-radius: 7px;
+  font-size: 12px; cursor: pointer; transition: all .15s;
 }
-.btn-signout:hover { border-color: var(--red); color: var(--red); }
+.btn-out:hover { color: #f87171; border-color: #7f1d1d; }
 
-/* 主內容區 */
-.main-content {
+/* Main content */
+.main {
   margin-left: var(--nav-w);
   min-height: 100dvh;
   display: flex; flex-direction: column;
 }
 .topbar {
-  height: 56px; background: var(--s1);
+  height: var(--top-h); flex-shrink: 0;
+  background: var(--bg0);
   border-bottom: 1px solid var(--bd);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 20px; position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 12px;
+  position: sticky; top: 0; z-index: 100;
 }
-.topbar-title { font-size: 16px; font-weight: 600; }
-.menu-toggle { display: none; background: none; border: none; color: var(--tx); font-size: 20px; cursor: pointer; }
-.page-content { flex: 1; padding: 24px; }
-
-/* 首頁 */
-.welcome-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
-.welcome-card {
-  background: var(--s1); border: 1px solid var(--bd);
-  border-radius: 12px; padding: 20px;
-  cursor: pointer; transition: all .2s;
-  text-decoration: none; color: var(--tx);
-  display: flex; flex-direction: column; gap: 8px;
+.topbar-menu { display: none; background: none; border: none; color: var(--tx2); cursor: pointer; padding: 4px; }
+.topbar-title { font-size: 15px; font-weight: 600; flex: 1; }
+.topbar-tag {
+  font-size: 11px; color: var(--tx3);
+  background: var(--bg2); border: 1px solid var(--bd);
+  border-radius: 4px; padding: 3px 8px;
 }
-.welcome-card:hover { border-color: var(--ac); background: var(--s2); transform: translateY(-2px); }
-.welcome-card .icon { font-size: 28px; }
-.welcome-card .title { font-size: 15px; font-weight: 600; }
-.welcome-card .desc { font-size: 12px; color: var(--mu); }
 
-/* 內容頁 */
-.content-header { margin-bottom: 20px; }
-.content-header h1 { font-size: 20px; font-weight: 700; }
-.content-header p { font-size: 13px; color: var(--mu); margin-top: 4px; }
+.page { flex: 1; padding: 28px 24px; }
+.page-header { margin-bottom: 24px; }
+.page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -.4px; }
+.page-header p { font-size: 13px; color: var(--tx2); margin-top: 4px; }
+
+/* Home grid */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.home-card {
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: 12px; padding: 20px 18px;
+  cursor: pointer; transition: all .18s;
+  text-decoration: none; color: inherit;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.home-card:hover {
+  background: var(--bg3);
+  border-color: var(--bd2);
+  transform: translateY(-1px);
+}
+.home-card-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: rgba(26,111,181,.15);
+  display: flex; align-items: center; justify-content: center;
+}
+.home-card-icon svg { width: 18px; height: 18px; }
+.home-card-title { font-size: 13.5px; font-weight: 600; }
+.home-card-desc { font-size: 12px; color: var(--tx3); }
+
+/* Placeholder */
+.wip {
+  background: var(--bg1); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 60px 24px;
+  text-align: center; color: var(--tx3);
+}
+.wip-title { font-size: 15px; font-weight: 500; color: var(--tx2); margin: 12px 0 6px; }
+
+/* Overlay */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 199; backdrop-filter: blur(2px);
+}
 
 /* Loading */
 .loading {
   display: flex; align-items: center; justify-content: center;
-  height: 200px; gap: 10px; color: var(--mu);
+  gap: 10px; height: 160px; color: var(--tx3); font-size: 13px;
 }
-.spinner {
-  width: 20px; height: 20px;
-  border: 2px solid var(--bd);
-  border-top-color: var(--ac);
-  border-radius: 50%;
-  animation: spin .8s linear infinite;
+.spin {
+  width: 16px; height: 16px;
+  border: 2px solid var(--bd2); border-top-color: var(--ac2);
+  border-radius: 50%; animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 遮罩（手機選單用）*/
-.overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.5); z-index: 99;
-}
-
-/* ── 手機版 ── */
+/* Mobile */
 @media (max-width: 768px) {
+  :root { --nav-w: 220px; }
   .sidebar { transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
-  .main-content { margin-left: 0; }
-  .menu-toggle { display: block; }
+  .sidebar.open { transform: translateX(0); box-shadow: 8px 0 32px rgba(0,0,0,.5); }
   .overlay.show { display: block; }
-  .page-content { padding: 16px; }
-  .welcome-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .main { margin-left: 0; }
+  .topbar-menu { display: flex; align-items: center; }
+  .page { padding: 20px 16px; }
+  .home-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .home-card { padding: 16px 14px; }
 }
 </style>
 </head>
 <body>
 
-<!-- ① 登入畫面 -->
+<!-- ① 登入 -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-logo">🏔</div>
-    <div class="login-title">DBC 系統</div>
-    <div class="login-sub">請使用 Google 帳號登入</div>
-    <button class="g-signin-btn" onclick="signIn()">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
-      使用 Google 帳號登入
+    <div class="login-logo">
+      <svg id="圖層_1" data-name="圖層 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 150">
+        <defs><style>.cls-1{fill:#fff;}</style></defs>
+        <path class="cls-1" d="M202,79.77H178v8.85H202q6.09,0,6.09-4.43V84Q208.11,79.78,202,79.77Z"/>
+        <path class="cls-1" d="M206,64.63v-.14Q206,61,200.78,61H178v7.25h22.82C204.28,68.22,206,67,206,64.63Z"/>
+        <path class="cls-1" d="M112.84,62.76H98.26V87.1h14.58q19,0,19-12v-.42Q131.85,62.77,112.84,62.76Z"/>
+        <path class="cls-1" d="M336.17,32.17H49.83A42.83,42.83,0,0,0,7,75H7a42.83,42.83,0,0,0,42.83,42.83H336.17A42.83,42.83,0,0,0,379,75h0A42.83,42.83,0,0,0,336.17,32.17ZM152.25,75.69a28,28,0,0,1-.87,7.12A19.55,19.55,0,0,1,148,89.52a22.32,22.32,0,0,1-6.5,5.77,37,37,0,0,1-10.72,3.91,71.55,71.55,0,0,1-15.59,1.52H78.62V49.28h36.5a75.14,75.14,0,0,1,15.21,1.38,38.35,38.35,0,0,1,10.72,3.67,22.29,22.29,0,0,1,6.67,5.53,19.35,19.35,0,0,1,3.56,6.57,25.4,25.4,0,0,1,1,7.19Zm76.46,10.16q0,14.87-21.71,14.87H158.33V49.28h48.39q10.38,0,14.69,3.29a10.12,10.12,0,0,1,4.32,8.4v.76A8.8,8.8,0,0,1,223,68.54a13.47,13.47,0,0,1-6.08,3.28,19.17,19.17,0,0,1,3.83,1.31,23.27,23.27,0,0,1,3.73,2.28,9.93,9.93,0,0,1,3.12,3.94A13.48,13.48,0,0,1,228.71,85ZM307.38,70H287q-2.34-7.87-16.93-7.88-17.22,0-17.22,12V75a12,12,0,0,0,.8,4.35,12.87,12.87,0,0,0,2.62,4.08,12.39,12.39,0,0,0,5.4,3.18,26.89,26.89,0,0,0,8.47,1.18,31.91,31.91,0,0,0,7.53-.8,18.63,18.63,0,0,0,4.91-1.76,9.1,9.1,0,0,0,2.76-2.42,9.27,9.27,0,0,0,1.32-2.07c.14-.42.27-.88.41-1.39h20.33v1.11a17.62,17.62,0,0,1-.69,4.8,17.16,17.16,0,0,1-3.05,5.54,22.46,22.46,0,0,1-6,5.39,35.26,35.26,0,0,1-10.44,3.9,68.38,68.38,0,0,1-15.59,1.59h-2.7A62.81,62.81,0,0,1,253,99.89a33.89,33.89,0,0,1-10.62-4.46,22.55,22.55,0,0,1-6.15-6.33,21.35,21.35,0,0,1-3-6.77,30,30,0,0,1-.69-6.5v-2a31.21,31.21,0,0,1,.65-6.5,22.5,22.5,0,0,1,9-12.9,33.64,33.64,0,0,1,10.65-4.35,64.9,64.9,0,0,1,16.07-1.76h2.7a76.37,76.37,0,0,1,11.78.83,48,48,0,0,1,9,2.14,30.77,30.77,0,0,1,6.43,3.14,20.42,20.42,0,0,1,4.39,3.7,18.22,18.22,0,0,1,2.59,4,15.77,15.77,0,0,1,1.32,3.76,18.31,18.31,0,0,1,.31,3.25Z"/>
+      </svg>
+    </div>
+    <div class="login-divider"></div>
+    <div class="login-title">工作人員入口</div>
+    <div class="login-sub">請使用授權的 Google 帳號登入</div>
+    <button class="g-btn" onclick="signIn()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+      以 Google 帳號繼續
     </button>
   </div>
 </div>
 
-<!-- ② 填寫姓名畫面（第一次登入）-->
-<div id="register-screen" style="display:none;min-height:100dvh;align-items:center;justify-content:center;">
-  <div class="pending-card">
-    <div class="pending-icon">👋</div>
-    <div class="pending-title">歡迎！請填寫姓名</div>
-    <div class="pending-sub">
-      請填寫您的姓名或暱稱，<br>
-      讓管理員知道是誰在申請帳號。
-    </div>
-    <div class="pending-email" id="register-email-txt"></div>
-    <input id="register-name-input" type="text" placeholder="請輸入姓名或暱稱"
-      style="width:100%;padding:12px 16px;border-radius:8px;border:1px solid var(--bd);
-             background:var(--s2);color:var(--tx);font-size:15px;margin:16px 0;outline:none;">
-    <button onclick="submitRegister()"
-      style="width:100%;padding:12px;background:var(--ac);color:#fff;border:none;
-             border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;">
-      送出申請
-    </button>
-    <button class="btn-logout" onclick="signOut()">取消登出</button>
+<!-- ② 填寫姓名 -->
+<div id="register-screen" class="center-screen">
+  <div class="center-card">
+    <div class="status-icon">👋</div>
+    <div class="center-title">填寫您的姓名</div>
+    <div class="center-sub">請填寫姓名或暱稱，讓管理員確認身份後核准帳號。</div>
+    <div class="email-badge" id="reg-email"></div>
+    <input id="reg-name" class="input-field" type="text" placeholder="姓名 / 暱稱" autocomplete="name">
+    <button class="btn-primary" onclick="submitRegister()">送出申請</button>
+    <button class="btn-ghost" onclick="signOut()">取消</button>
   </div>
 </div>
 
-<!-- ③ 等待審核畫面 -->
-<div id="pending-screen">
-  <div class="pending-card">
-    <div class="pending-icon">⏳</div>
-    <div class="pending-title">帳號審核中</div>
-    <div class="pending-sub">
-      您的帳號申請已收到，<br>
-      管理員審核通過後即可使用系統。<br>
-      通常在 1 個工作日內完成。
-    </div>
-    <div class="pending-email" id="pending-email-txt"></div>
-    <button class="btn-logout" onclick="signOut()">登出</button>
+<!-- ③ 待審核 -->
+<div id="pending-screen" class="center-screen">
+  <div class="center-card">
+    <div class="status-icon">⏳</div>
+    <div class="center-title">帳號審核中</div>
+    <div class="center-sub">申請已送出，管理員核准後即可登入。</div>
+    <div class="email-badge" id="pend-email"></div>
+    <button class="btn-ghost" onclick="signOut()">登出</button>
   </div>
 </div>
 
-<!-- ③ 主畫面 -->
+<!-- ④ 主畫面 -->
 <div id="app-screen">
   <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
-  <!-- 側邊欄 -->
   <nav class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-i">🏔</div>
-      <div>
-        <div class="logo-t">DBC 系統</div>
-        <div class="logo-s">滑雪行程管理</div>
+    <div class="sb-header">
+      <div class="sb-logo">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 150">
+          <path fill="#fff" d="M202,79.77H178v8.85H202q6.09,0,6.09-4.43V84Q208.11,79.78,202,79.77Z"/>
+          <path fill="#fff" d="M206,64.63v-.14Q206,61,200.78,61H178v7.25h22.82C204.28,68.22,206,67,206,64.63Z"/>
+          <path fill="#fff" d="M112.84,62.76H98.26V87.1h14.58q19,0,19-12v-.42Q131.85,62.77,112.84,62.76Z"/>
+          <path fill="#fff" d="M336.17,32.17H49.83A42.83,42.83,0,0,0,7,75H7a42.83,42.83,0,0,0,42.83,42.83H336.17A42.83,42.83,0,0,0,379,75h0A42.83,42.83,0,0,0,336.17,32.17ZM152.25,75.69a28,28,0,0,1-.87,7.12A19.55,19.55,0,0,1,148,89.52a22.32,22.32,0,0,1-6.5,5.77,37,37,0,0,1-10.72,3.91,71.55,71.55,0,0,1-15.59,1.52H78.62V49.28h36.5a75.14,75.14,0,0,1,15.21,1.38,38.35,38.35,0,0,1,10.72,3.67,22.29,22.29,0,0,1,6.67,5.53,19.35,19.35,0,0,1,3.56,6.57,25.4,25.4,0,0,1,1,7.19Zm76.46,10.16q0,14.87-21.71,14.87H158.33V49.28h48.39q10.38,0,14.69,3.29a10.12,10.12,0,0,1,4.32,8.4v.76A8.8,8.8,0,0,1,223,68.54a13.47,13.47,0,0,1-6.08,3.28,19.17,19.17,0,0,1,3.83,1.31,23.27,23.27,0,0,1,3.73,2.28,9.93,9.93,0,0,1,3.12,3.94A13.48,13.48,0,0,1,228.71,85ZM307.38,70H287q-2.34-7.87-16.93-7.88-17.22,0-17.22,12V75a12,12,0,0,0,.8,4.35,12.87,12.87,0,0,0,2.62,4.08,12.39,12.39,0,0,0,5.4,3.18,26.89,26.89,0,0,0,8.47,1.18,31.91,31.91,0,0,0,7.53-.8,18.63,18.63,0,0,0,4.91-1.76,9.1,9.1,0,0,0,2.76-2.42,9.27,9.27,0,0,0,1.32-2.07c.14-.42.27-.88.41-1.39h20.33v1.11a17.62,17.62,0,0,1-.69,4.8,17.16,17.16,0,0,1-3.05,5.54,22.46,22.46,0,0,1-6,5.39,35.26,35.26,0,0,1-10.44,3.9,68.38,68.38,0,0,1-15.59,1.59h-2.7A62.81,62.81,0,0,1,253,99.89a33.89,33.89,0,0,1-10.62-4.46,22.55,22.55,0,0,1-6.15-6.33,21.35,21.35,0,0,1-3-6.77,30,30,0,0,1-.69-6.5v-2a31.21,31.21,0,0,1,.65-6.5,22.5,22.5,0,0,1,9-12.9,33.64,33.64,0,0,1,10.65-4.35,64.9,64.9,0,0,1,16.07-1.76h2.7a76.37,76.37,0,0,1,11.78.83,48,48,0,0,1,9,2.14,30.77,30.77,0,0,1,6.43,3.14,20.42,20.42,0,0,1,4.39,3.7,18.22,18.22,0,0,1,2.59,4,15.77,15.77,0,0,1,1.32,3.76,18.31,18.31,0,0,1,.31,3.25Z"/>
+        </svg>
       </div>
     </div>
 
-    <!-- 導航選單（動態產生）-->
-    <div id="nav-menu" style="flex:1;overflow-y:auto;padding:8px 0;"></div>
+    <div class="sb-nav" id="nav-menu"></div>
 
-    <div class="sidebar-bottom">
-      <div class="user-info">
-        <div class="user-avatar" id="user-avatar"></div>
-        <div>
-          <div class="user-name" id="user-name-txt">—</div>
-          <div class="user-role" id="user-role-txt">—</div>
+    <div class="sb-bottom">
+      <div class="user-row">
+        <div class="user-av" id="uav"></div>
+        <div style="flex:1;min-width:0">
+          <div class="user-name" id="uname">—</div>
+          <div class="user-role" id="urole">—</div>
         </div>
       </div>
-      <button class="btn-signout" onclick="signOut()">登出</button>
+      <button class="btn-out" onclick="signOut()">登出</button>
     </div>
   </nav>
 
-  <!-- 主內容 -->
-  <div class="main-content">
+  <div class="main">
     <div class="topbar">
-      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <button class="topbar-menu" onclick="toggleSidebar()">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
       <div class="topbar-title" id="page-title">首頁</div>
-      <div style="width:40px"></div>
+      <div class="topbar-tag" id="user-tag"></div>
     </div>
-    <div class="page-content" id="page-content">
-      <div class="loading"><div class="spinner"></div> 載入中...</div>
+    <div class="page" id="page-content">
+      <div class="loading"><div class="spin"></div> 載入中</div>
     </div>
   </div>
 </div>
 
-<!-- Google Identity Services -->
 <script src="https://accounts.google.com/gsi/client" async></script>
-
 <script>
-// ── 設定 ──
-const CLIENT_ID      = '278003648368-dd08o1b24knf3tlvhfp7rustnq3cs2gc.apps.googleusercontent.com';
-const APPS_SCRIPT    = 'https://script.google.com/macros/s/AKfycbw2-7v48isKdkrJyZNCJEI1UEFfbL3lupGZwUPO4vHyt9B3AjkxKaV3ZHQlvz_LenOI/exec';
+const CLIENT_ID   = '278003648368-dd08o1b24knf3tlvhfp7rustnq3cs2gc.apps.googleusercontent.com';
+const API         = 'https://script.google.com/macros/s/AKfycbw2-7v48isKdkrJyZNCJEI1UEFfbL3lupGZwUPO4vHyt9B3AjkxKaV3ZHQlvz_LenOI/exec';
 
-// ── 頁面定義 ──
-const PAGE_DEF = {
-  '課程安排'    : { icon: '📋', section: '資料', desc: '旅客課程安排總覽' },
-  '入住單－野澤': { icon: '🏔', section: '入住單', desc: '野澤入住資訊＋車況' },
-  '入住單－斑尾': { icon: '⛷', section: '入住單', desc: '斑尾入住資訊＋車況' },
-  '入住單－龍平': { icon: '🇰🇷', section: '入住單', desc: '龍平入住資訊＋車況' },
-  '送客單－野澤': { icon: '🚌', section: '送客單', desc: '野澤送客資訊' },
-  '送客單－斑尾': { icon: '🚌', section: '送客單', desc: '斑尾送客資訊' },
-  '送客單－龍平': { icon: '🚌', section: '送客單', desc: '龍平送客資訊' },
-  '教練班表'    : { icon: '👨‍🏫', section: '管理', desc: '教練排班資訊' },
-  '每日教練需求': { icon: '📊', section: '管理', desc: '各雪場每日教練需求' },
-  '銷量分析'    : { icon: '📈', section: '管理', desc: '報名趨勢與銷量統計' },
+const PAGES = {
+  '課程安排'    : { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>', section: '課程', desc: '旅客課程安排' },
+  '入住單－野澤': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>', section: '入住單', desc: '野澤入住＋車況' },
+  '入住單－斑尾': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>', section: '入住單', desc: '斑尾入住＋車況' },
+  '入住單－龍平': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>', section: '入住單', desc: '龍平入住＋車況' },
+  '送客單－野澤': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>', section: '送客單', desc: '野澤送客資訊' },
+  '送客單－斑尾': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>', section: '送客單', desc: '斑尾送客資訊' },
+  '送客單－龍平': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>', section: '送客單', desc: '龍平送客資訊' },
+  '教練班表'    : { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>', section: '管理', desc: '教練排班' },
+  '每日教練需求': { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>', section: '管理', desc: '各場館教練需求' },
+  '銷量分析'    : { icon: '<path stroke-linecap="round" stroke-linejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>', section: '管理', desc: '銷量統計' },
 };
 
-// ── 狀態 ──
-let currentUser  = null;
-let currentPage  = null;
-let tokenClient  = null;
-let idToken      = null;
+let currentUser = null;
+let idToken     = null;
 
-// ── Google 登入 ──
+function svgIcon(path) {
+  return `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${path}</svg>`;
+}
+
+/* ── 登入 ── */
 function signIn() {
-  google.accounts.id.initialize({
-    client_id: CLIENT_ID,
-    callback : handleCredential,
-    auto_select: false,
-  });
-  google.accounts.id.prompt((notification) => {
-    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-      // 直接顯示帳號選擇
-      google.accounts.id.renderButton(
-        document.getElementById('login-screen'),
-        { theme: 'outline', size: 'large', width: 280 }
-      );
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, auto_select: false });
+  google.accounts.id.prompt(n => {
+    if (n.isNotDisplayed() || n.isSkippedMoment()) {
+      google.accounts.id.renderButton(document.querySelector('.g-btn').parentNode, { theme: 'outline', size: 'large' });
     }
   });
 }
 
-function handleCredential(response) {
-  idToken = response.credential;
-
-  // 解析 email/name（不驗證，交給 Apps Script 驗證）
-  const payload = JSON.parse(atob(idToken.split('.')[1]));
-  const email   = payload.email;
-  const name    = payload.name || '';
-
-  verifyWithServer(idToken, name);
+function onCredential(resp) {
+  idToken = resp.credential;
+  callAPI({token: idToken, action: 'check'});
 }
 
-// ── 呼叫 Apps Script 驗證（GET 避免 CORS preflight）──
-async function verifyWithServer(token, name) {
+async function callAPI(params) {
   try {
-    const params = new URLSearchParams({token, name});
-    const res    = await fetch(`${APPS_SCRIPT}?${params}`, {
-      redirect: 'follow',
-    });
-    const data = await res.json();
-    handleAuthResult(data);
-  } catch(e) {
-    alert('連線失敗，請稍後再試\n' + e.message);
-  }
+    const qs  = new URLSearchParams(params);
+    const res = await fetch(`${API}?${qs}`, { redirect: 'follow' });
+    handleResult(await res.json());
+  } catch(e) { alert('連線失敗，請稍後再試'); }
 }
 
-// ── 處理驗證結果 ──
-function handleAuthResult(data) {
-  if (data.status === 'approved') {
-    currentUser = data;
-    showApp();
-  } else if (data.status === 'new_user') {
-    // 第一次登入，需要填名字
-    showRegister(data.email);
-  } else if (data.status === 'pending') {
-    showPending(data.email);
-  } else if (data.status === 'disabled') {
-    alert('此帳號已被停用，請聯絡管理員。');
-  } else {
-    alert('登入失敗：' + (data.message || '未知錯誤'));
-  }
+function handleResult(d) {
+  hide('login-screen'); hide('register-screen'); hide('pending-screen'); hide('app-screen');
+  if (d.status === 'approved') { currentUser = d; showApp(); }
+  else if (d.status === 'new_user') { showRegister(d.email); }
+  else if (d.status === 'pending')  { showPending(d.email); }
+  else if (d.status === 'disabled') { alert('此帳號已停用，請聯絡管理員。'); show('login-screen', 'flex'); }
+  else { alert('錯誤：' + (d.message||'請重試')); show('login-screen', 'flex'); }
 }
 
-// ── 顯示填寫姓名畫面 ──
 function showRegister(email) {
-  document.getElementById('login-screen').style.display    = 'none';
-  document.getElementById('register-screen').style.display = 'flex';
-  document.getElementById('pending-screen').style.display  = 'none';
-  document.getElementById('app-screen').style.display      = 'none';
-  document.getElementById('register-email-txt').textContent = email;
+  show('register-screen', 'flex');
+  document.getElementById('reg-email').textContent = email;
 }
-
-// ── 送出姓名申請 ──
 async function submitRegister() {
-  const name = document.getElementById('register-name-input').value.trim();
-  if (!name) { alert('請填寫姓名或暱稱'); return; }
-  try {
-    const params = new URLSearchParams({token: idToken, name, action: 'register'});
-    const res    = await fetch(`${APPS_SCRIPT}?${params}`, {redirect: 'follow'});
-    const data   = await res.json();
-    if (data.status === 'pending') {
-      document.getElementById('register-screen').style.display = 'none';
-      showPending(data.email);
-    } else {
-      alert('送出失敗：' + (data.message || '請稍後再試'));
-    }
-  } catch(e) {
-    alert('連線失敗：' + e.message);
-  }
+  const name = document.getElementById('reg-name').value.trim();
+  if (!name) { alert('請填寫姓名'); return; }
+  await callAPI({ token: idToken, name, action: 'register' });
 }
 
-// ── 顯示各畫面 ──
 function showPending(email) {
-  document.getElementById('login-screen').style.display    = 'none';
-  document.getElementById('register-screen').style.display = 'none';
-  document.getElementById('pending-screen').style.display  = 'flex';
-  document.getElementById('app-screen').style.display      = 'none';
-  document.getElementById('pending-email-txt').textContent  = email;
+  show('pending-screen', 'flex');
+  document.getElementById('pend-email').textContent = email;
 }
 
+/* ── 主畫面 ── */
 function showApp() {
-  document.getElementById('login-screen').style.display   = 'none';
-  document.getElementById('pending-screen').style.display = 'none';
-  document.getElementById('app-screen').style.display     = 'block';
-
-  // 使用者資訊
+  show('app-screen');
   const u = currentUser;
-  document.getElementById('user-name-txt').textContent = u.name || u.email;
-  document.getElementById('user-role-txt').textContent = u.role || '';
-  const av = document.getElementById('user-avatar');
+  document.getElementById('uname').textContent  = u.name || u.email;
+  document.getElementById('urole').textContent  = u.role;
+  document.getElementById('user-tag').textContent = u.role;
+  const av = document.getElementById('uav');
   av.textContent = (u.name || u.email)[0].toUpperCase();
-
   buildNav(u.pages || []);
   showHome();
 }
 
-// ── 建立導航選單 ──
 function buildNav(pages) {
   const menu = document.getElementById('nav-menu');
-  menu.innerHTML = '';
+  let html = `<div class="nav-item active" id="nav-home" onclick="showHome()">
+    ${svgIcon('<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>')}
+    首頁</div>`;
 
-  // 首頁
-  menu.innerHTML += `
-    <div class="nav-item active" id="nav-home" onclick="showHome()">
-      <span class="icon">🏠</span> 首頁
-    </div>`;
-
-  // 按 section 分組
-  const sections = {};
+  const secs = {};
   pages.forEach(p => {
-    const def = PAGE_DEF[p];
-    if (!def) return;
-    if (!sections[def.section]) sections[def.section] = [];
-    sections[def.section].push(p);
+    const s = PAGES[p]?.section || '其他';
+    if (!secs[s]) secs[s] = [];
+    secs[s].push(p);
   });
 
-  Object.entries(sections).forEach(([sec, ps]) => {
-    menu.innerHTML += `<div class="nav-section">${sec}</div>`;
+  Object.entries(secs).forEach(([sec, ps]) => {
+    html += `<div class="nav-section-label">${sec}</div>`;
     ps.forEach(p => {
-      const def = PAGE_DEF[p];
-      const id  = 'nav-' + p.replace(/[－\s]/g, '-');
-      menu.innerHTML += `
-        <div class="nav-item" id="${id}" onclick="navigateTo('${p}')">
-          <span class="icon">${def.icon}</span> ${p}
-        </div>`;
+      const def = PAGES[p] || {};
+      const id  = 'n-' + p.replace(/[^a-z0-9]/gi, '-');
+      html += `<div class="nav-item" id="${id}" onclick="go('${p}')">${svgIcon(def.icon||'')} ${p}</div>`;
     });
   });
+  menu.innerHTML = html;
 }
 
-// ── 導航 ──
-function navigateTo(page) {
-  currentPage = page;
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  const navId = 'nav-' + page.replace(/[－\s]/g, '-');
-  const navEl = document.getElementById(navId);
-  if (navEl) navEl.classList.add('active');
-
+function go(page) {
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+  const el = document.getElementById('n-' + page.replace(/[^a-z0-9]/gi, '-'));
+  if (el) el.classList.add('active');
   document.getElementById('page-title').textContent = page;
-  document.getElementById('page-content').innerHTML =
-    '<div class="loading"><div class="spinner"></div> 載入中...</div>';
-
+  document.getElementById('page-content').innerHTML = '<div class="loading"><div class="spin"></div> 載入中</div>';
   closeSidebar();
-  loadPage(page);
-}
-
-// ── 首頁 ──
-function showHome() {
-  currentPage = null;
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('nav-home').classList.add('active');
-  document.getElementById('page-title').textContent = '首頁';
-  closeSidebar();
-
-  const pages = currentUser.pages || [];
-  const cards = pages.map(p => {
-    const def = PAGE_DEF[p] || {icon:'📄', desc:''};
-    return `
-      <div class="welcome-card" onclick="navigateTo('${p}')">
-        <div class="icon">${def.icon}</div>
-        <div class="title">${p}</div>
-        <div class="desc">${def.desc}</div>
-      </div>`;
-  }).join('');
-
-  document.getElementById('page-content').innerHTML = `
-    <div class="content-header">
-      <h1>歡迎，${currentUser.name || ''} 👋</h1>
-      <p>角色：${currentUser.role} ／ 請選擇功能</p>
-    </div>
-    <div class="welcome-grid">${cards}</div>`;
-}
-
-// ── 載入頁面資料（各頁面由此擴充）──
-function loadPage(page) {
-  // 目前顯示「建置中」，各頁面後續一一建立
-  const def = PAGE_DEF[page] || {};
   setTimeout(() => {
     document.getElementById('page-content').innerHTML = `
-      <div class="content-header">
-        <h1>${def.icon || ''} ${page}</h1>
-        <p>${def.desc || ''}</p>
-      </div>
-      <div style="background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:40px;text-align:center;color:var(--mu)">
-        <div style="font-size:40px;margin-bottom:12px">🚧</div>
-        <div style="font-size:16px;font-weight:600;margin-bottom:6px">頁面建置中</div>
-        <div style="font-size:13px">此頁面功能即將上線</div>
+      <div class="page-header"><h1>${page}</h1><p>${PAGES[page]?.desc||''}</p></div>
+      <div class="wip">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M12 6V12L16 14M22 12C22 17.523 17.523 22 12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2C17.523 2 22 6.477 22 12Z"/>
+        </svg>
+        <div class="wip-title">建置中</div>
+        <p style="font-size:12px">此功能即將上線</p>
       </div>`;
-  }, 300);
+  }, 200);
 }
 
-// ── 登出 ──
+function showHome() {
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+  document.getElementById('nav-home')?.classList.add('active');
+  document.getElementById('page-title').textContent = '首頁';
+  closeSidebar();
+  const pages = currentUser.pages || [];
+  const cards = pages.map(p => {
+    const d = PAGES[p] || {};
+    return `<div class="home-card" onclick="go('${p}')">
+      <div class="home-card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${d.icon||''}</svg>
+      </div>
+      <div class="home-card-title">${p}</div>
+      <div class="home-card-desc">${d.desc||''}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('page-content').innerHTML = `
+    <div class="page-header">
+      <h1>歡迎，${currentUser.name || ''}</h1>
+      <p style="color:var(--tx3)">選擇功能開始工作</p>
+    </div>
+    <div class="home-grid">${cards}</div>`;
+}
+
 function signOut() {
   google.accounts.id.disableAutoSelect();
-  currentUser = null;
-  idToken     = null;
-  document.getElementById('login-screen').style.display    = 'flex';
-  document.getElementById('register-screen').style.display = 'none';
-  document.getElementById('pending-screen').style.display  = 'none';
-  document.getElementById('app-screen').style.display      = 'none';
+  currentUser = null; idToken = null;
+  hide('register-screen'); hide('pending-screen'); hide('app-screen');
+  show('login-screen', 'flex');
 }
 
-// ── 手機選單 ──
 function toggleSidebar() {
-  const s = document.getElementById('sidebar');
-  const o = document.getElementById('overlay');
-  s.classList.toggle('open');
-  o.classList.toggle('show');
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
 }
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('overlay').classList.remove('show');
 }
+function show(id, d='block') { document.getElementById(id).style.display = d; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-// ── 自動登入（如果已有 session）──
 window.onload = () => {
-  google.accounts.id.initialize({
-    client_id  : CLIENT_ID,
-    callback   : handleCredential,
-    auto_select: true,
-  });
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, auto_select: true });
   google.accounts.id.prompt();
 };
 </script>
