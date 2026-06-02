@@ -373,10 +373,9 @@ body {
   font-size:10.5px; font-weight:600; text-align:center;
 }
 
-/* 分隔列（日期）— CSS sticky，完全沒抖動 */
+/* 分隔列（日期）— CSS sticky */
 tr.c-sep td {
   position:-webkit-sticky; position:sticky; left:0; z-index:3;
-  min-width:100vw;
   background:#0d2240 !important;
   color:var(--tx); font-weight:700; font-size:12px;
   padding:7px 14px;
@@ -386,7 +385,6 @@ tr.c-sep td {
 /* 標籤列（訂編+姓名）— CSS sticky */
 tr.c-label td {
   position:-webkit-sticky; position:sticky; left:0; z-index:3;
-  min-width:100vw;
   background:#000e20; padding:4px 12px 3px;
   border-top:1px solid var(--bd);
 }
