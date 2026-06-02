@@ -330,22 +330,36 @@ body {
    COURSE PAGE
 ════════════════════════════════ */
 .course-page { display:flex; flex-direction:column; height:calc(100dvh - var(--top-h)); overflow:hidden; padding:0; }
+
+/* toolbar 兩列 */
 .course-toolbar {
-  display:flex; align-items:center; justify-content:space-between;
-  gap:8px; padding:9px 16px 8px; flex-wrap:wrap; flex-shrink:0;
+  display:flex; flex-direction:column;
+  gap:6px; padding:9px 14px 8px; flex-shrink:0;
   border-bottom:1px solid var(--bd);
 }
-.course-tabs, .course-views { display:flex; gap:4px; flex-wrap:wrap; }
-.c-tab, .c-view {
-  padding:5px 11px; border-radius:6px;
+.toolbar-row { display:flex; align-items:center; gap:4px; }
+.toolbar-lbl { font-size:10px; color:var(--tx3); white-space:nowrap; margin-right:2px; letter-spacing:.5px; }
+
+/* 地區 Tab — 明顯一些 */
+.c-tab {
+  padding:5px 12px; border-radius:6px;
   border:1px solid var(--bd); background:var(--bg2);
-  color:var(--tx2); font-size:12px; cursor:pointer;
+  color:var(--tx2); font-size:12.5px; font-weight:500; cursor:pointer;
   transition:all .15s; font-family:inherit; white-space:nowrap;
 }
-.c-tab:hover, .c-view:hover { background:var(--bg3); color:var(--tx); }
-.c-tab.active { background:rgba(26,111,181,.25); color:#60b3f4; border-color:var(--ac); font-weight:500; }
-.c-view.active { background:rgba(26,111,181,.15); color:#9dd0f8; border-color:var(--bd2); }
-.c-refresh { padding:5px 9px; font-size:14px; line-height:1; }
+.c-tab:hover { background:var(--bg3); color:var(--tx); }
+.c-tab.active { background:rgba(26,111,181,.3); color:#60b3f4; border-color:var(--ac); font-weight:600; }
+
+/* 欄位 View — 小 chip 風格 */
+.c-view {
+  padding:3px 9px; border-radius:10px;
+  border:1px solid transparent; background:transparent;
+  color:var(--tx3); font-size:11.5px; cursor:pointer;
+  transition:all .15s; font-family:inherit; white-space:nowrap;
+}
+.c-view:hover { background:var(--bg2); color:var(--tx2); border-color:var(--bd); }
+.c-view.active { background:var(--bg3); color:var(--tx); border-color:var(--bd2); }
+.c-refresh { padding:3px 8px; font-size:13px; line-height:1; margin-left:auto; }
 
 .course-body { flex:1; overflow:auto; -webkit-overflow-scrolling:touch; }
 .c-table { border-collapse:separate; border-spacing:0; font-size:12px; width:max-content; min-width:100%; }
@@ -355,26 +369,29 @@ body {
   position:sticky; top:0; z-index:4;
   background:var(--bg1); color:var(--tx3);
   border-bottom:2px solid var(--bd2);
-  padding:5px 5px; white-space:nowrap;
+  padding:5px 5px; white-space:nowrap; overflow:hidden;
   font-size:10.5px; font-weight:600; text-align:center;
 }
 
-/* 分隔列（日期）— 不跟著左右滑 */
+/* 分隔列（日期）— JS 控制 transform 讓它不跟著左右滑 */
 tr.c-sep td {
-  position:sticky; left:0; z-index:3; min-width:100vw;
-  background:#060f1e !important;
-  color:var(--tx2); font-weight:600; font-size:11.5px;
-  padding:6px 14px; border-top:1px solid var(--bd2); border-bottom:1px solid var(--bd);
+  position:relative; z-index:3; will-change:transform;
+  min-width:100vw;
+  background:#0d2240 !important;
+  color:var(--tx); font-weight:700; font-size:12px;
+  padding:7px 14px;
+  border-top:2px solid var(--ac); border-bottom:1px solid var(--bd2);
 }
 
-/* 標籤列（訂編+姓名）— 不跟著左右滑 */
+/* 標籤列（訂編+姓名）— JS 控制 transform */
 tr.c-label td {
-  position:sticky; left:0; z-index:3; min-width:100vw;
+  position:relative; z-index:3; will-change:transform;
+  min-width:100vw;
   background:#000e20; padding:4px 12px 3px;
   border-top:1px solid var(--bd);
 }
 tr.c-label .c-order { font-size:10px; color:var(--tx3); font-family:monospace; letter-spacing:.3px; margin-right:7px; }
-tr.c-label .c-name  { font-size:13px; font-weight:600; color:var(--tx2); }
+tr.c-label .c-name  { font-size:12px; font-weight:500; color:var(--tx2); }
 tr.c-label.s-blue   td { border-left:3px solid #2a7fc0; }
 tr.c-label.s-brown  td { border-left:3px solid #8b6050; }
 tr.c-label.s-orange td { border-left:3px solid #c47a3a; }
@@ -800,11 +817,17 @@ function renderCourse() {
   const areas = ['全部','野澤','斑尾','龍平','湯澤'];
   pc.innerHTML = `
     <div class="course-toolbar">
-      <div class="course-tabs">
-        ${areas.map(a => `<button class="c-tab${a===cArea?' active':''}" data-area="${a}" onclick="switchCArea('${a}')">${a}</button>`).join('')}
+      <div class="toolbar-row">
+        <span class="toolbar-lbl">地區</span>
+        <div class="course-tabs">
+          ${areas.map(a => `<button class="c-tab${a===cArea?' active':''}" data-area="${a}" onclick="switchCArea('${a}')">${a}</button>`).join('')}
+        </div>
       </div>
-      <div class="course-views">
-        ${Object.keys(COURSE_VCOLS).map(v => `<button class="c-view${v===cView?' active':''}" data-view="${v}" onclick="switchCView('${v}')">${v}</button>`).join('')}
+      <div class="toolbar-row">
+        <span class="toolbar-lbl">欄位</span>
+        <div class="course-views">
+          ${Object.keys(COURSE_VCOLS).map(v => `<button class="c-view${v===cView?' active':''}" data-view="${v}" onclick="switchCView('${v}')">${v}</button>`).join('')}
+        </div>
         <button class="c-view c-refresh" onclick="refreshCourse()" title="重新載入">↺</button>
       </div>
     </div>
@@ -885,13 +908,11 @@ function renderCTable() {
     else if (cur) cur.rows.push(row);
   }
 
-  /* colgroup 設定欄寬 */
-  let html = `<table class="c-table"><colgroup>`;
-  colIdxs.forEach(ci => { html += `<col style="width:${C_META[ci][1]}px;min-width:${C_META[ci][1]}px">`; });
-  html += '</colgroup><thead><tr>';
+  /* 表頭（寬度直接設在 th，不用 colgroup）*/
+  let html = `<table class="c-table"><thead><tr>`;
   colIdxs.forEach(ci => {
-    const [name,,align] = C_META[ci];
-    html += `<th style="text-align:${align}">${name}</th>`;
+    const [name, w, align] = C_META[ci];
+    html += `<th style="width:${w}px;min-width:${w}px;text-align:${align}">${name}</th>`;
   });
   html += '</tr></thead><tbody>';
 
@@ -940,6 +961,20 @@ function renderCTable() {
   if (!total) html += `<tr class="c-label"><td colspan="${N}" style="text-align:center;padding:32px;color:var(--tx3)">此期間無資料</td></tr>`;
   html += '</tbody></table>';
   body.innerHTML = html;
+  bindStickyRows();
+}
+
+function bindStickyRows() {
+  const body = document.getElementById('course-body');
+  if (!body) return;
+  if (body._stkyFn) body.removeEventListener('scroll', body._stkyFn);
+  body._stkyFn = function() {
+    const x = this.scrollLeft + 'px';
+    this.querySelectorAll('tr.c-label td, tr.c-sep td').forEach(td => {
+      td.style.transform = 'translateX(' + x + ')';
+    });
+  };
+  body.addEventListener('scroll', body._stkyFn, { passive: true });
 }
 </script>
 </body>
