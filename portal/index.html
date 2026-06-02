@@ -361,35 +361,35 @@ body {
 .c-view.active { background:var(--bg3); color:var(--tx); border-color:var(--bd2); }
 .c-refresh { padding:3px 8px; font-size:13px; line-height:1; margin-left:auto; }
 
-.course-body { flex:1; overflow:auto; }
+.course-body { flex:1; overflow:auto; font-size:12px; }
 
-/* ── CSS Grid 結構（取代 table，sticky left 才可靠）── */
-.c-grid { display:grid; width:max-content; min-width:100%; font-size:12px; }
-
-/* 表頭格 — sticky top，隨左右滑動 */
+/* 表頭列 — sticky top，跟著左右滑 */
+.c-hdr-row {
+  display:flex; position:-webkit-sticky; position:sticky; top:0; z-index:5;
+  width:max-content; min-width:100%;
+  background:var(--bg1); border-bottom:2px solid var(--bd2);
+}
 .c-hdr {
-  position:sticky; top:0; z-index:4;
-  background:var(--bg1); color:var(--tx3);
-  border-bottom:2px solid var(--bd2);
-  padding:5px 5px; white-space:nowrap; overflow:hidden;
-  font-size:10.5px; font-weight:600;
+  flex-shrink:0; padding:5px 5px;
+  font-size:10.5px; font-weight:600; color:var(--tx3);
+  white-space:nowrap; overflow:hidden;
   display:flex; align-items:center;
 }
 
-/* 分隔列 — grid-column 全跨，sticky left 鎖住 */
+/* 分隔列 — 直接子元素，sticky left，iOS Safari 才可靠 */
 .c-sep {
-  grid-column:1/-1;
-  position:sticky; left:0; z-index:3;
+  position:-webkit-sticky; position:sticky; left:0; z-index:3;
+  width:100%;
   background:#0d2240;
   color:var(--tx); font-weight:700; font-size:12px;
   padding:7px 14px;
   border-top:2px solid var(--ac); border-bottom:1px solid var(--bd2);
 }
 
-/* 標籤列（訂編+姓名）— 全跨，sticky left */
+/* 標籤列 — 直接子元素，sticky left */
 .c-label {
-  grid-column:1/-1;
-  position:sticky; left:0; z-index:3;
+  position:-webkit-sticky; position:sticky; left:0; z-index:3;
+  width:100%;
   background:#000e20; padding:4px 12px 3px;
   border-top:1px solid var(--bd);
 }
@@ -399,9 +399,10 @@ body {
 .c-order { font-size:10px; color:var(--tx3); font-family:monospace; margin-right:7px; }
 .c-name  { font-size:12px; font-weight:500; color:var(--tx2); }
 
-/* 資料格 — 正常滑動 */
+/* 資料列 — flex row，跟著左右滑 */
+.c-data-row { display:flex; width:max-content; min-width:100%; }
 .c-cell {
-  padding:5px 7px; white-space:nowrap; overflow:hidden;
+  flex-shrink:0; padding:5px 7px; white-space:nowrap; overflow:hidden;
   border-bottom:1px solid var(--bd); background:var(--bg0); color:var(--tx);
   display:flex; align-items:center; justify-content:center;
 }
@@ -914,15 +915,13 @@ function renderCTable() {
     else if (cur) cur.rows.push(row);
   }
 
-  /* CSS Grid：grid-template-columns 決定每欄寬度 */
-  const gridCols = colIdxs.map(ci => C_META[ci][1] + 'px').join(' ');
-  let html = `<div class="c-grid" style="grid-template-columns:${gridCols}">`;
-
-  /* 表頭格 */
+  /* 表頭列（sticky top，直接放進 course-body） */
+  let html = `<div class="c-hdr-row">`;
   colIdxs.forEach(ci => {
-    const [name, , align] = C_META[ci];
-    html += `<div class="c-hdr" style="justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
+    const [name, w, align] = C_META[ci];
+    html += `<div class="c-hdr" style="width:${w}px;justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
   });
+  html += '</div>';
 
   let total = 0;
   for (const grp of groups) {
@@ -931,7 +930,7 @@ function renderCTable() {
     if (!sorted.length) continue;
     total += sorted.length;
 
-    /* 分隔列 */
+    /* 分隔列（直接子元素，sticky left） */
     const dateStr = String(grp.sep[1] ?? '');
     const wday    = String(grp.sep[2] ?? '');
     const counts  = cArea === '全部'
@@ -939,7 +938,7 @@ function renderCTable() {
       : `${cArea} ${sorted.length}人`;
     html += `<div class="c-sep">${dateStr}（${wday}） &nbsp; ${counts}</div>`;
 
-    /* 每個旅客：標籤列 + 資料格 */
+    /* 每個旅客：標籤列（直接子元素，sticky left）+ 資料列（flex row） */
     for (const row of sorted) {
       const orderNo = String(row[CI['訂編']]     ?? '');
       const name    = String(row[CI['中文姓名']] ?? '');
@@ -947,10 +946,10 @@ function renderCTable() {
       const sc      = cAreaColor(i1);
 
       html += `<div class="c-label${sc?' '+sc:''}"><span class="c-order">${orderNo}</span><span class="c-name">${name}</span></div>`;
-
+      html += '<div class="c-data-row">';
       colIdxs.forEach(ci => {
         const val = String(row[ci] ?? '');
-        const [, , align] = C_META[ci];
+        const [, w, align] = C_META[ci];
         let cls = 'c-cell' + (align === 'left' ? ' c-left' : '');
         if (ci === CI['Lv']) {
           const lv = val.toLowerCase();
@@ -960,13 +959,13 @@ function renderCTable() {
         if (ci===CI['類別'] && val==='雙板') cls += ' td-board';
         if (ci===CI['天數'] && val.includes('含')) cls += ' td-incl';
         if (ci===CI['註記'] && val==='專屬')  cls += ' td-spec';
-        html += `<div class="${cls}">${val}</div>`;
+        html += `<div class="${cls}" style="width:${w}px">${val}</div>`;
       });
+      html += '</div>';
     }
   }
 
   if (!total) html += `<div class="c-label" style="padding:32px;color:var(--tx3)">此期間無資料</div>`;
-  html += '</div>';
   body.innerHTML = html;
 }
 </script>
