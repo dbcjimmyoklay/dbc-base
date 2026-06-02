@@ -546,6 +546,16 @@ function signIn() {
 
 function onCredential(resp) {
   idToken = resp.credential;
+  if (currentUser) {
+    // 已登入狀態下靜默刷新 token → 存好、如有 auth 失敗畫面就自動重試
+    _saveSess(currentUser, idToken);
+    const cb = document.getElementById('course-body');
+    if (cb && cb.dataset.authFail === '1') {
+      cb.dataset.authFail = '';
+      loadCourse();
+    }
+    return;
+  }
   callAPI({token: idToken, action: 'check'});
 }
 
@@ -861,7 +871,23 @@ async function loadCourse() {
   try {
     const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCourse`, {redirect:'follow'});
     const data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.message || '伺服器錯誤');
+    if (data.status !== 'ok') {
+      const isAuth = data.message && (data.message.includes('Token') || data.message.includes('未授權'));
+      if (isAuth) {
+        const body = document.getElementById('course-body');
+        if (body) {
+          body.dataset.authFail = '1';
+          body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3);line-height:2.2">
+            驗證已過期<br>
+            <button onclick="signOut()" style="margin-top:8px;padding:8px 22px;background:var(--ac);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-family:inherit">重新登入</button>
+          </div>`;
+        }
+        // 嘗試靜默重新取得 token
+        google.accounts.id.prompt();
+        return;
+      }
+      throw new Error(data.message || '伺服器錯誤');
+    }
     cRawRows = data.rows || [];
     try {
       localStorage.setItem(COURSE_CACHE_KEY, JSON.stringify(cRawRows));
