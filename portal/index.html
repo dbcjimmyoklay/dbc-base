@@ -361,7 +361,7 @@ body {
 .c-view.active { background:var(--bg3); color:var(--tx); border-color:var(--bd2); }
 .c-refresh { padding:3px 8px; font-size:13px; line-height:1; margin-left:auto; }
 
-.course-body { flex:1; overflow:auto; -webkit-overflow-scrolling:touch; }
+.course-body { flex:1; overflow:auto; }
 .c-table { border-collapse:separate; border-spacing:0; font-size:12px; width:max-content; min-width:100%; }
 
 /* 表頭 — 上下固定，左右會滑 */
@@ -373,9 +373,9 @@ body {
   font-size:10.5px; font-weight:600; text-align:center;
 }
 
-/* 分隔列（日期）— JS 控制 transform 讓它不跟著左右滑 */
+/* 分隔列（日期）— CSS sticky，完全沒抖動 */
 tr.c-sep td {
-  position:relative; z-index:3; will-change:transform;
+  position:-webkit-sticky; position:sticky; left:0; z-index:3;
   min-width:100vw;
   background:#0d2240 !important;
   color:var(--tx); font-weight:700; font-size:12px;
@@ -383,9 +383,9 @@ tr.c-sep td {
   border-top:2px solid var(--ac); border-bottom:1px solid var(--bd2);
 }
 
-/* 標籤列（訂編+姓名）— JS 控制 transform */
+/* 標籤列（訂編+姓名）— CSS sticky */
 tr.c-label td {
-  position:relative; z-index:3; will-change:transform;
+  position:-webkit-sticky; position:sticky; left:0; z-index:3;
   min-width:100vw;
   background:#000e20; padding:4px 12px 3px;
   border-top:1px solid var(--bd);
@@ -961,20 +961,6 @@ function renderCTable() {
   if (!total) html += `<tr class="c-label"><td colspan="${N}" style="text-align:center;padding:32px;color:var(--tx3)">此期間無資料</td></tr>`;
   html += '</tbody></table>';
   body.innerHTML = html;
-  bindStickyRows();
-}
-
-function bindStickyRows() {
-  const body = document.getElementById('course-body');
-  if (!body) return;
-  if (body._stkyFn) body.removeEventListener('scroll', body._stkyFn);
-  body._stkyFn = function() {
-    const x = this.scrollLeft + 'px';
-    this.querySelectorAll('tr.c-label td, tr.c-sep td').forEach(td => {
-      td.style.transform = 'translateX(' + x + ')';
-    });
-  };
-  body.addEventListener('scroll', body._stkyFn, { passive: true });
 }
 </script>
 </body>
