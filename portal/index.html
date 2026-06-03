@@ -509,6 +509,7 @@ body {
           <div class="user-role" id="urole">—</div>
         </div>
       </div>
+      <button class="btn-out" onclick="clearCacheReload()" style="background:transparent;color:var(--tx3);border-color:var(--bd);margin-bottom:6px;font-size:11px">↺ 清除快取</button>
       <button class="btn-out" onclick="signOut()">登出</button>
     </div>
   </nav>
@@ -708,6 +709,20 @@ function showHome() {
       <p style="color:var(--tx3)">選擇功能開始工作</p>
     </div>
     <div class="home-grid">${cards}</div>`;
+}
+
+async function clearCacheReload() {
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch(e) {}
+  window.location.reload(true);
 }
 
 function signOut() {
