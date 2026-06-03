@@ -537,10 +537,12 @@ function svgIcon(path) {
 
 /* ── 登入 ── */
 function signIn() {
+  // 登入時才初始化 GSI（只在 login screen 呼叫）
   google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, auto_select: false });
   google.accounts.id.prompt(n => {
     if (n.isNotDisplayed() || n.isSkippedMoment()) {
-      google.accounts.id.renderButton(document.querySelector('.g-btn').parentNode, { theme: 'outline', size: 'large' });
+      const btn = document.querySelector('.g-btn');
+      if (btn) google.accounts.id.renderButton(btn.parentNode, { theme: 'outline', size: 'large' });
     }
   });
 }
@@ -730,21 +732,19 @@ window.onload = () => {
   /* Service Worker */
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
-  /* Google silent auth（背景刷新 token）*/
-  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, auto_select: true });
-
-  /* 有快取 session → 直接顯示 app，完全不彈 Google 登入提示 */
+  /* 有快取 session → 直接顯示 app，完全不初始化 GSI（避免觸發 FedCM 提示）*/
   const sess = _loadSess();
   if (sess) {
     currentUser       = sess.user;
     idToken           = sess.token;
-    needsTokenRefresh = false; // 直接嘗試用快取 token，失敗再提示
     hide('login-screen');
     showApp();
-    // 不呼叫 prompt()，不顯示任何 Google UI
+    // 不呼叫 initialize() / prompt()，不會有任何 Google 登入提示
   } else {
     show('login-screen', 'flex');
-    google.accounts.id.prompt(); // 只有第一次沒有 session 才顯示
+    // 沒有 session 才初始化 GSI + 顯示登入
+    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, auto_select: true });
+    google.accounts.id.prompt();
   }
 };
 

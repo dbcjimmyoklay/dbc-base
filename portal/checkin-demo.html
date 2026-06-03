@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>野澤入住單 Demo</title>
+<style>
+:root{
+  --bg0:#000b18;--bg1:#001529;--bg2:#001f3d;--bg3:#002a52;
+  --bd:#0a3260;--bd2:#0d3d75;--tx:#fff;--tx2:#8aadcc;--tx3:#4a7299;
+  --ac:#1a6fb5;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg0);color:var(--tx);font-family:-apple-system,'Inter',sans-serif;font-size:13px;height:100dvh;display:flex;flex-direction:column;}
+
+.toolbar{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
+  border-bottom:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap;
+}
+.toolbar-title{font-size:14px;font-weight:600;}
+select{padding:5px 10px;border-radius:7px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx2);font-size:12px;cursor:pointer;}
+.btn-today{padding:5px 12px;border-radius:7px;border:1px solid var(--ac);background:rgba(26,111,181,.2);color:#60b3f4;font-size:12px;cursor:pointer;}
+.btn-refresh{padding:5px 10px;font-size:14px;border-radius:7px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx2);cursor:pointer;margin-left:auto;}
+
+.body{flex:1;overflow:auto;font-size:12px;}
+
+/* 日期分隔列 */
+.c-sep{
+  position:-webkit-sticky;position:sticky;left:0;z-index:4;width:100%;
+  background:#0d2240;color:var(--tx);font-weight:700;font-size:11.5px;
+  padding:7px 14px;border-top:2px solid var(--ac);border-bottom:1px solid var(--bd2);
+}
+.c-sep .htl{font-weight:400;color:var(--tx2);margin-left:8px;font-size:11px;}
+
+/* 旅館 Header */
+.ci-hotel{
+  position:-webkit-sticky;position:sticky;left:0;z-index:3;width:100%;
+  background:#001a35;color:var(--tx);font-weight:700;font-size:13px;
+  padding:9px 14px 7px;border-top:1px solid var(--bd2);
+  display:flex;align-items:center;gap:8px;
+}
+.ci-hotel-count{font-size:11px;font-weight:400;color:var(--tx2);background:var(--bg3);padding:2px 8px;border-radius:10px;}
+
+/* 房號 Sub-header */
+.ci-room{
+  position:-webkit-sticky;position:sticky;left:0;z-index:3;width:100%;
+  background:#000e20;color:#5ba3d4;font-size:12px;font-weight:500;
+  padding:5px 20px;border-left:3px solid #2a7fc0;border-bottom:1px solid var(--bd);
+}
+.ci-room.pending{color:var(--tx3);border-left-color:var(--tx3);}
+
+/* 標籤列 */
+.c-label{
+  position:-webkit-sticky;position:sticky;left:0;z-index:3;width:100%;
+  background:#000a18;padding:4px 14px 3px;border-top:1px solid #071a2e;
+}
+.c-order{font-size:10px;color:var(--tx3);font-family:monospace;margin-right:7px;}
+.c-name{font-size:12px;font-weight:500;color:var(--tx2);}
+
+/* 欄位 Header — CSS Grid，grid-template-columns inline 設定 */
+.c-hdr-row{
+  display:grid;
+  grid-template-columns:52px 28px 28px 100px 26px 26px 40px 26px 60px 110px;
+  position:-webkit-sticky;position:sticky;top:0;z-index:5;
+  width:max-content;min-width:100%;
+  background:var(--bg1);border-bottom:2px solid var(--bd2);
+}
+.c-hdr{
+  padding:5px 5px;font-size:10.5px;font-weight:600;color:var(--tx3);
+  white-space:nowrap;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* 資料列 — CSS Grid，同樣的 grid-template-columns */
+.c-data-row{
+  display:grid;
+  grid-template-columns:52px 28px 28px 100px 26px 26px 40px 26px 60px 110px;
+  width:max-content;min-width:100%;
+}
+.c-cell{
+  padding:5px 7px;white-space:nowrap;overflow:hidden;
+  border-bottom:1px solid var(--bd);background:var(--bg0);color:var(--tx);
+  display:flex;align-items:center;justify-content:center;
+}
+.c-cell.left{justify-content:flex-start;}
+
+/* 欄寬 — 最少要能顯示表頭文字 */
+.w-dt{width:52px;} .w-days{width:28px;} .w-s{width:28px;}
+.w-en{width:100px;} .w-gs{width:26px;} .w-age{width:28px;}
+.w-hno{width:42px;} .w-seq{width:26px;}
+.w-rt{width:60px;} .w-note{width:110px;}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-title">野澤入住單</div>
+  <select>
+    <option>（全部日期）</option>
+    <option selected>1/10（六）</option>
+    <option>1/11（日）</option>
+  </select>
+  <button class="btn-today">今天</button>
+  <button class="btn-refresh">↺</button>
+</div>
+
+<div class="body">
+
+  <!-- 欄位 header（portal 顯示欄位）-->
+  <div class="c-hdr-row">
+    <div class="c-hdr">出發</div>
+    <div class="c-hdr">泊</div>
+    <div class="c-hdr">天</div>
+    <div class="c-hdr" style="justify-content:flex-start">英文姓名</div>
+    <div class="c-hdr">性</div>
+    <div class="c-hdr">齡</div>
+    <div class="c-hdr">房號</div>
+    <div class="c-hdr">序</div>
+    <div class="c-hdr" style="justify-content:flex-start">房型</div>
+    <div class="c-hdr" style="justify-content:flex-start">入住備註</div>
+  </div>
+
+  <!-- ── 日期分隔列 ── -->
+  <div class="c-sep">
+    1/10（六）
+    <span class="htl">常盤屋 8 ｜ 奈良屋 2 ｜ 包子 3</span>
+  </div>
+
+  <!-- ══ 旅館：常盤屋 ══ -->
+  <div class="ci-hotel">
+    常盤屋 <span class="ci-hotel-count">8人</span>
+  </div>
+
+  <div class="ci-room">▎ 403</div>
+
+  <div class="c-label"><span class="c-order">5398</span><span class="c-name">徐培彤</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">HSU PEI-TSUNG</div><div class="c-cell w-gs">女</div><div class="c-cell w-age">31</div>
+    <div class="c-cell w-hno">403</div><div class="c-cell w-seq">1</div>
+    <div class="c-cell w-rt left">大床</div><div class="c-cell w-note left"></div>
+  </div>
+
+  <div class="c-label"><span class="c-order">5398</span><span class="c-name">陳莉瑋</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">CHEN LI-WEI</div><div class="c-cell w-gs">女</div><div class="c-cell w-age">35</div>
+    <div class="c-cell w-hno">403</div><div class="c-cell w-seq">1</div>
+    <div class="c-cell w-rt left">大床</div><div class="c-cell w-note left"></div>
+  </div>
+
+  <div class="ci-room">▎ 402</div>
+
+  <div class="c-label"><span class="c-order">4172</span><span class="c-name">洪琇敏</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">HUNG HSIU-MIN</div><div class="c-cell w-gs">女</div><div class="c-cell w-age">25</div>
+    <div class="c-cell w-hno">402</div><div class="c-cell w-seq">0</div>
+    <div class="c-cell w-rt left">雙人</div><div class="c-cell w-note left">不住東京</div>
+  </div>
+
+  <div class="c-label"><span class="c-order">4172</span><span class="c-name">李姿萱</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">LI TZU-HSUAN</div><div class="c-cell w-gs">女</div><div class="c-cell w-age">26</div>
+    <div class="c-cell w-hno">402</div><div class="c-cell w-seq">0</div>
+    <div class="c-cell w-rt left">雙人</div><div class="c-cell w-note left">不住東京</div>
+  </div>
+
+  <!-- 房號空白 -->
+  <div class="ci-room pending">▎ 待安排</div>
+
+  <div class="c-label"><span class="c-order">5556</span><span class="c-name">邱文冠</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">QIU WEN-GUAN</div><div class="c-cell w-gs">男</div><div class="c-cell w-age">34</div>
+    <div class="c-cell w-hno"></div><div class="c-cell w-seq"></div>
+    <div class="c-cell w-rt left"></div><div class="c-cell w-note left"></div>
+  </div>
+
+  <!-- ══ 旅館：奈良屋 ══ -->
+  <div class="ci-hotel">
+    奈良屋 <span class="ci-hotel-count">2人</span>
+  </div>
+
+  <div class="ci-room">▎ 302</div>
+
+  <div class="c-label"><span class="c-order">4387</span><span class="c-name">葉庭</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">4</div><div class="c-cell w-days">3</div>
+    <div class="c-cell w-en left">YEH TING</div><div class="c-cell w-gs">女</div><div class="c-cell w-age">32</div>
+    <div class="c-cell w-hno">302</div><div class="c-cell w-seq">0</div>
+    <div class="c-cell w-rt left">胡蝶</div><div class="c-cell w-note left">不住東京</div>
+  </div>
+
+  <div class="c-label"><span class="c-order">4387</span><span class="c-name">楊適宇</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">4</div><div class="c-cell w-days">3</div>
+    <div class="c-cell w-en left">YANG SHIH-YU</div><div class="c-cell w-gs">男</div><div class="c-cell w-age">33</div>
+    <div class="c-cell w-hno">302</div><div class="c-cell w-seq">0</div>
+    <div class="c-cell w-rt left">胡蝶</div><div class="c-cell w-note left">不住東京</div>
+  </div>
+
+  <!-- ══ 旅館：包子 ══ -->
+  <div class="ci-hotel">
+    包子hsus st anton <span class="ci-hotel-count">3人</span>
+  </div>
+
+  <div class="ci-room">▎ 308</div>
+
+  <div class="c-label"><span class="c-order">3281</span><span class="c-name">黃月梅</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/10</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">HUANG YUE-MEI</div><div class="c-cell w-gs">女</div><div class="c-cell w-age">45</div>
+    <div class="c-cell w-hno">308</div><div class="c-cell w-seq">3</div>
+    <div class="c-cell w-rt left">白M*1</div><div class="c-cell w-note left"></div>
+  </div>
+
+  <!-- ── 日期分隔列 ── -->
+  <div class="c-sep">
+    1/11（日）
+    <span class="htl">常盤屋 4 ｜ sakaya 6</span>
+  </div>
+
+  <div class="ci-hotel">
+    常盤屋 <span class="ci-hotel-count">4人</span>
+  </div>
+
+  <div class="ci-room">▎ 501</div>
+
+  <div class="c-label"><span class="c-order">5612</span><span class="c-name">李諾享</span></div>
+  <div class="c-data-row">
+    <div class="c-cell w-dt">01/11</div><div class="c-cell w-s">3</div><div class="c-cell w-days">2</div>
+    <div class="c-cell w-en left">LI YAN-XIANG</div><div class="c-cell w-gs">男</div><div class="c-cell w-age">22</div>
+    <div class="c-cell w-hno">501</div><div class="c-cell w-seq">2</div>
+    <div class="c-cell w-rt left">雙人</div><div class="c-cell w-note left"></div>
+  </div>
+
+</div>
+</body>
+</html>
