@@ -380,10 +380,11 @@ body {
 .c-sep {
   position:-webkit-sticky; position:sticky; left:0; z-index:3;
   width:100%;
-  background:#0d2240;
-  color:var(--tx); font-weight:700; font-size:12px;
-  padding:7px 14px;
-  border-top:2px solid var(--ac); border-bottom:1px solid var(--bd2);
+  background:#071e3d;
+  color:#fff; font-weight:700; font-size:12.5px;
+  padding:8px 14px;
+  border-top:3px solid var(--ac); border-bottom:2px solid var(--bd2);
+  letter-spacing:.3px;
 }
 
 /* 標籤列 — 直接子元素，sticky left */
@@ -414,23 +415,23 @@ body {
 .td-incl  { color:#f0f060 !important; }
 .td-spec  { color:#f0f060 !important; font-weight:600; }
 
-/* ── 入住單：旅館 Header ── */
+/* ── 入住單：旅館 Header（縮小版）── */
 .ci-hotel {
   position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%;
-  background:#001a35; color:var(--tx); font-weight:700; font-size:13px;
-  padding:9px 14px 7px; border-top:1px solid var(--bd2);
+  background:#00203d; color:#7ec8f5; font-weight:600; font-size:12px;
+  padding:5px 14px 4px; border-top:2px solid #1a5a8a;
   display:flex; align-items:center; gap:8px;
 }
 .ci-hotel-count {
-  font-size:11px; font-weight:400; color:var(--tx2);
-  background:var(--bg3); padding:2px 8px; border-radius:10px;
+  font-size:10.5px; font-weight:400; color:var(--tx3);
+  background:var(--bg3); padding:1px 7px; border-radius:8px;
 }
 
-/* ── 入住單：房號 Sub-header ── */
+/* ── 入住單：房型 Sub-header ── */
 .ci-room {
   position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%;
   background:#000e20; color:#5ba3d4; font-size:12px; font-weight:500;
-  padding:5px 20px; border-left:3px solid #2a7fc0; border-bottom:1px solid var(--bd);
+  padding:4px 20px; border-left:3px solid #2a7fc0; border-bottom:1px solid var(--bd);
 }
 .ci-room.pending { color:var(--tx3); border-left-color:var(--tx3); }
 </style>
@@ -1047,12 +1048,10 @@ const CI_META = {
   6: ['英文姓名',100,'left'],
   7: ['性別',    38,'center'],
   8: ['年齡',    38,'center'],
-  9: ['房號',    42,'center'],
  11: ['序號',    38,'center'],
- 10: ['房型',    60,'left'],
- 13: ['入住備註',110,'left'],
+ 13: ['入住備註',120,'left'],
 };
-const CI_COLS = [1,2,3,6,7,8,9,11,10,13];
+const CI_COLS = [1,2,3,6,7,8,11,13]; // 房號(9)/房型(10) 移到 sub-header，不在資料列
 const CI_CACHE_TTL = 15 * 60 * 1000;
 const CI_AREA_NAME = { nozawa:'野澤', madarao:'斑尾', yongpyong:'龍平' };
 
@@ -1220,10 +1219,12 @@ function renderCITable() {
       for (const room of rooms) {
         const roomRows = roomMap[room];
         const roomType = String(roomRows[0][10] || ''); // 房型 index 10
-        if (!room) {
+        // sub-header 顯示 房型，房號只作分組用途不顯示
+        if (!room && !roomType) {
           html += `<div class="ci-room pending">▎ 待安排</div>`;
         } else {
-          html += `<div class="ci-room">▎ ${room}${roomType?' &nbsp; '+roomType:''}</div>`;
+          const label = roomType || room; // 優先顯示房型，沒有才用房號
+          html += `<div class="ci-room">▎ ${label}</div>`;
         }
         for (const row of roomRows) {
           const orderNo = String(row[4] || '');

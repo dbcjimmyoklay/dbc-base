@@ -164,10 +164,18 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
                         booking_info_map, is_nozawa):
     """
     建立單一入住單的寫入列
-    is_nozawa=True 時從 booking_info_map 補旅館/房型資訊
+    is_nozawa=True 時從 booking_info_map 補旅館名稱
+    訂房表只記錄一位名字，但同訂編的所有旅客都要帶入旅館資訊
     """
     write_rows = []
     n          = len(CHECKIN_COLS)
+
+    # 建立「只用訂編」查找的索引，讓同訂單所有旅客都能找到旅館
+    booking_by_ding = {}
+    for key, info in booking_info_map.items():
+        ding_part = key.split('_')[0]
+        if ding_part not in booking_by_ding:
+            booking_by_ding[ding_part] = info
 
     for item in all_sheet_rows:
         if item['_is_separator']:
@@ -204,13 +212,14 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
                 if mc in old and old[mc]:
                     r_out[mc] = old[mc]
 
-        # ── 野澤：從訂房表補旅館名稱（更新項目欄）──
-        # 房號/序號/入住備註/房型 均來自科威原始資料或手動，不從訂房表補
-        if is_nozawa and bk_key in booking_info_map:
-            bk = booking_info_map[bk_key]
-            hotel = bk.get('旅館', '')
-            if hotel:
-                r_out['項目'] = hotel
+        # ── 野澤：從訂房表補旅館名稱（同訂編所有旅客都更新）──
+        # 先精確匹配（訂編+姓名），再用訂編查（訂房表只寫一個名字）
+        if is_nozawa:
+            bk = booking_info_map.get(bk_key) or booking_by_ding.get(ding)
+            if bk:
+                hotel = bk.get('旅館', '')
+                if hotel:
+                    r_out['項目'] = hotel
 
         row_data = [str(r_out.get(c, '') or '') for c in CHECKIN_COLS]
         write_rows.append(row_data)
