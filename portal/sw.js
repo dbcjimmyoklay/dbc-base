@@ -1,4 +1,4 @@
-const V = 'dbc-v2';
+const V = 'dbc-v4';  // 版號升級，強制清除舊快取
 const SHELL = ['/dbc-base/portal/', '/dbc-base/portal/index.html'];
 
 self.addEventListener('install', e => {
@@ -23,14 +23,14 @@ self.addEventListener('fetch', e => {
       url.includes('gstatic.com')) return;
 
   if (url.includes('/dbc-base/portal/')) {
+    // Network first：永遠優先抓最新版，失敗才用快取
     e.respondWith(
-      caches.match(e.request).then(cached => {
-        const net = fetch(e.request).then(res => {
+      fetch(e.request)
+        .then(res => {
           if (res.ok) caches.open(V).then(c => c.put(e.request, res.clone()));
           return res;
-        }).catch(() => null);
-        return cached || net;
-      })
+        })
+        .catch(() => caches.match(e.request))
     );
   }
 });
