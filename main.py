@@ -97,18 +97,18 @@ def export_full_xlsx(all_records_flat):
 
 def run_agent(name, fn, *args, **kwargs):
     """執行單一工作員，回傳 (success, result, elapsed_sec)"""
-    print(f"\n{'─' * 50}")
-    print(f"▶  {name}")
-    print(f"{'─' * 50}")
+    print(f"\n{'-' * 50}")
+    print(f">>  {name}")
+    print(f"{'-' * 50}")
     t0 = time.time()
     try:
         result = fn(*args, **kwargs)
         elapsed = time.time() - t0
-        print(f"✓  {name} 完成（{elapsed:.1f}s）")
+        print(f"OK  {name} 完成（{elapsed:.1f}s）")
         return True, result, elapsed
     except Exception as e:
         elapsed = time.time() - t0
-        print(f"✗  {name} 失敗（{elapsed:.1f}s）：{e}")
+        print(f"NG  {name} 失敗（{elapsed:.1f}s）：{e}")
         traceback.print_exc()
         return False, None, elapsed
 
@@ -117,7 +117,7 @@ def run_agent(name, fn, *args, **kwargs):
 # 主流程
 # ═══════════════════════════════════════════
 
-def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
+def run_daily(skip_watcher=False, skip_reporter=False):
     """
     每日自動流程：
     CLEANER → COURSE → WATCHER → ROOM → REPORTER → 完整大表.xlsx
@@ -135,7 +135,7 @@ def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
     ok, cleaner_output, _ = run_agent('CLEANER 清洗員', cleaner_run)
     results['cleaner'] = ok
     if not ok:
-        print("\n⛔ CLEANER 失敗，中止後續流程")
+        print("\n[STOP] CLEANER 失敗，中止後續流程")
         return results
 
     # 2. COURSE（寫入課程安排）
@@ -157,24 +157,24 @@ def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
         print("\n  -- 略過 REPORTER --")
 
     # 6. 完整大表.xlsx
-    print(f"\n{'─' * 50}")
-    print("▶  完整大表.xlsx 輸出")
-    print(f"{'─' * 50}")
+    print(f"\n{'-' * 50}")
+    print(">>  完整大表.xlsx 輸出")
+    print(f"{'-' * 50}")
     try:
         export_full_xlsx(cleaner_output['all_records_flat'])
         results['full_xlsx'] = True
     except Exception as e:
-        print(f"✗  完整大表.xlsx 輸出失敗：{e}")
+        print(f"NG  完整大表.xlsx 輸出失敗：{e}")
         results['full_xlsx'] = False
 
-    # ── 總結 ──
+    # 總結
     total = time.time() - t_start
-    print(f"\n{'═' * 50}")
+    print(f"\n{'=' * 50}")
     print(f"每日流程完成  總耗時 {total:.1f}s  {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     for agent, ok in results.items():
-        status = '✓' if ok else '✗'
+        status = 'OK' if ok else 'NG'
         print(f"  {status} {agent}")
-    print(f"{'═' * 50}\n")
+    print(f"{'=' * 50}\n")
 
     return results
 
@@ -209,9 +209,9 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"\n{'═' * 50}")
+    print(f"\n{'=' * 50}")
     print(f"DBC 影子中台  {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-    print(f"{'═' * 50}")
+    print(f"{'=' * 50}")
 
     # ── 單獨執行 ──
     if args.cleaner:
@@ -237,7 +237,6 @@ def main():
     if args.all:
         results = run_daily(
             skip_watcher  = args.skip_watcher,
-            skip_room     = args.skip_room,
             skip_reporter = args.skip_reporter,
         )
         if results.get('cleaner'):
