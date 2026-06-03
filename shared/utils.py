@@ -35,6 +35,25 @@ def clean_val(x):
     return s
 
 
+def clean_seq_no(x):
+    """清洗序號欄位：保留 0（0 是有意義的代碼），只去除 None/NaN/空字串"""
+    if x is None:
+        return ''
+    if hasattr(x, 'iloc'):
+        x = x.iloc[0] if len(x) > 0 else ''
+    try:
+        if pd.isna(x):
+            return ''
+    except Exception:
+        pass
+    s = str(x).strip()
+    if s.lower() in ('nan', 'none', ''):
+        return ''
+    if s.endswith('.0') and s[:-2].lstrip('-').isdigit():
+        return s[:-2]
+    return s
+
+
 def safe_int(val):
     """轉整數；失敗或為 0 回傳空字串"""
     try:

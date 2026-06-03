@@ -204,22 +204,13 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
                 if mc in old and old[mc]:
                     r_out[mc] = old[mc]
 
-        # ── 野澤：從訂房表補旅館/房型/備註 ──
+        # ── 野澤：從訂房表補旅館名稱（更新項目欄）──
+        # 房號/序號/入住備註/房型 均來自科威原始資料或手動，不從訂房表補
         if is_nozawa and bk_key in booking_info_map:
             bk = booking_info_map[bk_key]
             hotel = bk.get('旅館', '')
-            room  = bk.get('房型', '')
-            note  = bk.get('入住備註', '')
-
-            # 項目欄：若訂房表有旅館名稱則使用，否則保持「野澤」
             if hotel:
                 r_out['項目'] = hotel
-
-            # 房型/入住備註：訂房表有值才填（不覆蓋已有的手動值）
-            if room and not r_out.get('房型', ''):
-                r_out['房型'] = room
-            if note and not r_out.get('入住備註', ''):
-                r_out['入住備註'] = note
 
         row_data = [str(r_out.get(c, '') or '') for c in CHECKIN_COLS]
         write_rows.append(row_data)

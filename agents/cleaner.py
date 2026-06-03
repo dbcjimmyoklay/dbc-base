@@ -33,7 +33,7 @@ try:
     )
     from shared.utils import (
         get_item, get_weekday, extract_date_from_group,
-        has_value, clean_val, safe_int, clean_order_no, clean_diet,
+        has_value, clean_val, clean_seq_no, safe_int, clean_order_no, clean_diet,
         normalize_level, classify_cols,
         parse_op_days, parse_op_ratio,
         infer_days_from_fee,
@@ -48,7 +48,7 @@ except ImportError:
     )
     from shared.utils import (
         get_item, get_weekday, extract_date_from_group,
-        has_value, clean_val, safe_int, clean_order_no, clean_diet,
+        has_value, clean_val, clean_seq_no, safe_int, clean_order_no, clean_diet,
         normalize_level, classify_cols,
         parse_op_days, parse_op_ratio,
         infer_days_from_fee,
@@ -261,9 +261,9 @@ def run():
             '護照號碼'     : clean_val(row.get('護照號碼', '')),
             '護照到期日'   : clean_val(row.get('護照到期日', '')),
             '飲食'         : clean_diet(row.get('飲食備註\n(定位備註)', '')),
-            '房號'         : clean_val(row.get('標準分房(房號)', '')),
-            '序號'         : clean_val(row.get('序號', '')),
-            '_房務備註'    : clean_val(row.get('分房備住', '')),
+            '房號'    : clean_val(row.get('標準分房(房號)', '')),
+            '序號'    : clean_seq_no(row.get('序號', '')),   # 保留 0（0 是有意義代碼）
+            '入住備註': clean_val(row.get('分房備住', '')),  # 第一個=雪場版（市區版是分房備住_2）
         })
 
     # ── 7. 排序 ──

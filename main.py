@@ -49,7 +49,7 @@ FULL_COLS = [
     '尺寸', '身高', '體重', '腳長', '雪板',
     'LEVEL', '類別', '衣褲', '護膝', '護臀', '手套', '4件組',
     '教練', '助教', 'checking', '備註', '報名日期', '團費',
-    '飲食', '房號', '序號', '_房務備註',
+    '飲食', '房號', '序號', '入住備註',
     '手機號碼', 'EMail', '國籍', '身分證', '生日',
     '護照號碼', '護照到期日', '旅客編號',
 ]
@@ -125,7 +125,6 @@ def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
     from agents.cleaner  import run as cleaner_run
     from agents.course   import run as course_run
     from agents.watcher  import run as watcher_run
-    from agents.room     import run as room_run
     from agents.reporter import run as reporter_run
 
     results   = {}
@@ -150,14 +149,7 @@ def run_daily(skip_watcher=False, skip_room=False, skip_reporter=False):
     else:
         print("\n  -- 略過 WATCHER --")
 
-    # 4. ROOM
-    if not skip_room:
-        ok, _, _ = run_agent('ROOM 房務員', room_run, cleaner_output)
-        results['room'] = ok
-    else:
-        print("\n  -- 略過 ROOM --")
-
-    # 5. REPORTER
+    # 4. REPORTER
     if not skip_reporter:
         ok, _, _ = run_agent('REPORTER 報表員', reporter_run, cleaner_output)
         results['reporter'] = ok
@@ -206,14 +198,13 @@ def main():
     # 單獨執行某個工作員
     parser.add_argument('--cleaner',  action='store_true', help='只執行 CLEANER 清洗員')
     parser.add_argument('--watcher',  action='store_true', help='只執行 WATCHER 比對員')
-    parser.add_argument('--room',     action='store_true', help='只執行 ROOM 房務員')
+    # --room 已移除（房務表功能已整併入入住單）
     parser.add_argument('--reporter', action='store_true', help='只執行 REPORTER 報表員')
     parser.add_argument('--checkin',  action='store_true', help='執行 CHECKIN 入住員（手動觸發）')
     parser.add_argument('--all',      action='store_true', help='執行全部（含 CHECKIN）')
 
     # 略過某個工作員
     parser.add_argument('--skip-watcher',  action='store_true', help='每日流程略過 WATCHER')
-    parser.add_argument('--skip-room',     action='store_true', help='每日流程略過 ROOM')
     parser.add_argument('--skip-reporter', action='store_true', help='每日流程略過 REPORTER')
 
     args = parser.parse_args()
@@ -231,11 +222,6 @@ def main():
     if args.watcher:
         from agents.watcher import run as watcher_run
         run_agent('WATCHER 比對員', watcher_run)
-        return
-
-    if args.room:
-        from agents.room import run as room_run
-        run_agent('ROOM 房務員', room_run)
         return
 
     if args.reporter:
