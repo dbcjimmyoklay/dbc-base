@@ -415,6 +415,44 @@ body {
 .td-incl  { color:#f0f060 !important; }
 .td-spec  { color:#f0f060 !important; font-weight:600; }
 
+/* ════ HOME PAGE ════ */
+.home-date { text-align:center; padding:20px 0 8px; }
+.home-date-main { font-size:22px; font-weight:700; color:var(--tx); }
+.home-date-sub  { font-size:13px; color:var(--tx2); margin-top:3px; }
+
+.home-section { margin:12px 16px 0; background:var(--bg1); border:1px solid var(--bd); border-radius:12px; padding:14px; }
+.home-section-title { font-size:11px; font-weight:600; color:var(--tx3); letter-spacing:.8px; text-transform:uppercase; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+
+.today-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--bd); }
+.today-row:last-child { border-bottom:none; }
+.today-row-zero { opacity:.4; }
+.today-area  { font-size:13px; font-weight:600; color:var(--tx); width:30px; }
+.today-total { font-size:13px; font-weight:700; color:#60b3f4; min-width:36px; }
+.today-detail { display:flex; gap:5px; flex-wrap:wrap; }
+.today-tag { font-size:11px; padding:2px 7px; border-radius:8px; }
+.today-tag.group { background:rgba(26,111,181,.2); color:#7ec8f5; border:1px solid rgba(26,111,181,.3); }
+.today-tag.pure  { background:rgba(50,180,100,.15); color:#6dddaa; border:1px solid rgba(50,180,100,.3); }
+.today-zero { font-size:13px; color:var(--tx3); }
+
+.equip-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.equip-btn { padding:7px 18px; border-radius:8px; border:1px solid var(--bd); background:var(--bg2); color:var(--tx2); font-size:13px; cursor:pointer; font-family:inherit; }
+.equip-btn:hover { background:var(--bg3); color:var(--tx); }
+.equip-detail { margin-top:10px; padding:8px 10px; background:var(--bg2); border-radius:8px; }
+.equip-hotel-row { display:flex; justify-content:space-between; padding:4px 0; font-size:12.5px; color:var(--tx2); border-bottom:1px solid var(--bd); }
+.equip-hotel-row:last-child { border-bottom:none; }
+
+.punch-btn { width:100%; padding:11px; border-radius:9px; border:1px solid var(--bd); background:var(--bg2); color:var(--tx3); font-size:13px; cursor:not-allowed; font-family:inherit; }
+
+.ql-edit-btn { font-size:11.5px; padding:3px 10px; border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--tx3); cursor:pointer; font-family:inherit; }
+.ql-edit-btn:hover { background:var(--bg2); color:var(--tx); }
+.ql-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.ql-item { background:var(--bg2); border:1px solid var(--bd); border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer; transition:background .15s; }
+.ql-item:hover { background:var(--bg3); }
+.ql-icon { width:28px; height:28px; margin:0 auto 6px; color:#5ba3d4; }
+.ql-icon svg { width:100%; height:100%; }
+.ql-name { font-size:11.5px; color:var(--tx2); line-height:1.3; word-break:keep-all; }
+.ql-setting-row { display:flex; align-items:center; padding:9px 0; border-bottom:1px solid var(--bd); gap:8px; }
+
 /* ── 入住單：旅館 Header（縮小版）── */
 .ci-hotel {
   position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%;
@@ -692,24 +730,189 @@ function showHome() {
   document.getElementById('nav-home')?.classList.add('active');
   document.getElementById('page-title').textContent = '首頁';
   closeSidebar();
-  document.getElementById('page-content').className = 'page';
-  const pages = currentUser.pages || [];
-  const cards = pages.map(p => {
-    const d = PAGES[p] || {};
-    return `<div class="home-card" onclick="go('${p}')">
-      <div class="home-card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${d.icon||''}</svg>
+  const pc = document.getElementById('page-content');
+  pc.className = 'page';
+
+  const WDAY = ['日','一','二','三','四','五','六'];
+  const now  = new Date();
+  const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+  const dayStr  = `星期${WDAY[now.getDay()]}`;
+
+  pc.innerHTML = `
+    <div class="home-date">
+      <div class="home-date-main">${dateStr}</div>
+      <div class="home-date-sub">${dayStr}</div>
+    </div>
+
+    <div class="home-section">
+      <div class="home-section-title">今日出發</div>
+      <div id="today-summary"><div style="color:var(--tx3);font-size:12px">載入中...</div></div>
+    </div>
+
+    <div class="home-section">
+      <div class="home-section-title">今日回收裝備</div>
+      <div class="equip-btns">
+        <button class="equip-btn" onclick="toggleEquip('nozawa','野澤')">野澤 ▸</button>
+        <button class="equip-btn" onclick="toggleEquip('madarao','斑尾')">斑尾 ▸</button>
+        <button class="equip-btn" onclick="toggleEquip('yongpyong','龍平')">龍平 ▸</button>
       </div>
-      <div class="home-card-title">${p}</div>
-      <div class="home-card-desc">${d.desc||''}</div>
+      <div id="equip-nozawa"    class="equip-detail" style="display:none"></div>
+      <div id="equip-madarao"   class="equip-detail" style="display:none"></div>
+      <div id="equip-yongpyong" class="equip-detail" style="display:none"></div>
+    </div>
+
+    <div class="home-section">
+      <div class="home-section-title">出勤打卡</div>
+      <button class="punch-btn" disabled>打卡功能建置中</button>
+    </div>
+
+    <div class="home-section" style="margin-bottom:20px">
+      <div class="home-section-title">
+        快速入口
+        <button class="ql-edit-btn" onclick="openQLSettings()">✎ 自訂</button>
+      </div>
+      <div id="ql-grid" class="ql-grid">${_renderQLGrid()}</div>
+    </div>`;
+
+  _loadTodaySummary();
+}
+
+/* ── 今日出發 ── */
+async function _loadTodaySummary() {
+  const el = document.getElementById('today-summary');
+  if (!el) return;
+  try {
+    const ck = localStorage.getItem('dbc_today');
+    const ts = parseInt(localStorage.getItem('dbc_today_ts')||'0');
+    if (ck && Date.now()-ts < 5*60*1000) { _renderTodaySummary(JSON.parse(ck), el); return; }
+  } catch(e) {}
+  try {
+    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getToday`,{redirect:'follow'});
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.message);
+    localStorage.setItem('dbc_today', JSON.stringify(data));
+    localStorage.setItem('dbc_today_ts', String(Date.now()));
+    _renderTodaySummary(data, el);
+  } catch(e) {
+    if (el) el.innerHTML = `<div style="color:var(--tx3);font-size:12px">無法載入（${e.message}）</div>`;
+  }
+}
+
+function _renderTodaySummary(data, el) {
+  const c = data.counts || {};
+  const areas = [
+    { name:'野澤', g:c.ng||0, p:c.np||0 },
+    { name:'斑尾', g:c.mg||0, p:c.mp||0 },
+    { name:'龍平', g:c.yn||0, p:c.yp||0 },
+    { name:'湯澤', g:0,       p:c.uz||0  },
+  ];
+  el.innerHTML = areas.map(a => {
+    const total = a.g + a.p;
+    return `<div class="today-row${total===0?' today-row-zero':''}">
+      <span class="today-area">${a.name}</span>
+      <span class="today-total">${total}人</span>
+      <span class="today-detail">
+        ${a.g>0?`<span class="today-tag group">團客 ${a.g}</span>`:''}
+        ${a.p>0?`<span class="today-tag pure">純課 ${a.p}</span>`:''}
+        ${total===0?'<span class="today-zero">－</span>':''}
+      </span>
     </div>`;
   }).join('');
-  document.getElementById('page-content').innerHTML = `
-    <div class="page-header">
-      <h1>歡迎，${currentUser.name || ''}</h1>
-      <p style="color:var(--tx3)">選擇功能開始工作</p>
+}
+
+/* ── 回收裝備 ── */
+const _equipOpen = {};
+function toggleEquip(area, label) {
+  const el  = document.getElementById(`equip-${area}`);
+  const btn = [...document.querySelectorAll('.equip-btn')].find(b=>b.textContent.startsWith(label));
+  if (!el) return;
+  _equipOpen[area] = !_equipOpen[area];
+  el.style.display = _equipOpen[area] ? 'block' : 'none';
+  if (btn) btn.textContent = `${label} ${_equipOpen[area]?'▾':'▸'}`;
+  if (_equipOpen[area] && !el.dataset.loaded) {
+    el.dataset.loaded = '1';
+    el.innerHTML = `<div style="color:var(--tx3);font-size:12px;padding:4px">送客單建置完成後顯示裝備歸還明細</div>`;
+  }
+}
+
+/* ── 快速入口 ── */
+function _getQL() {
+  try {
+    const s = localStorage.getItem(`dbc_ql_${currentUser?.email||''}`);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return (currentUser?.pages||[]).slice(0,6);
+}
+function _saveQL(links) {
+  try { localStorage.setItem(`dbc_ql_${currentUser?.email||''}`, JSON.stringify(links)); } catch(e) {}
+}
+function _renderQLGrid() {
+  const links = _getQL();
+  if (!links.length) return `<div style="color:var(--tx3);font-size:12px;padding:4px">點「自訂」新增快速入口</div>`;
+  return links.map(p => {
+    const d = PAGES[p]||{};
+    return `<div class="ql-item" onclick="go('${p}')">
+      <div class="ql-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${d.icon||''}</svg></div>
+      <div class="ql-name">${p}</div>
+    </div>`;
+  }).join('');
+}
+
+let _qlDraft = null;
+function openQLSettings() {
+  _qlDraft = [..._getQL()];
+  const all = currentUser?.pages||[];
+  const modal = document.createElement('div');
+  modal.id = 'ql-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `<div style="background:var(--bg1);width:100%;max-width:500px;border-radius:16px 16px 0 0;padding:20px 16px;max-height:80dvh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:600;color:var(--tx)">自訂快速入口</div>
+      <button onclick="document.getElementById('ql-modal').remove();_qlDraft=null" style="background:none;border:none;color:var(--tx3);font-size:20px;cursor:pointer;padding:0 4px">✕</button>
     </div>
-    <div class="home-grid">${cards}</div>`;
+    <div style="font-size:11.5px;color:var(--tx3);margin-bottom:12px">勾選要顯示的功能，上下箭頭調整順序</div>
+    <div id="ql-list">${_qlSettingsList(all)}</div>
+    <button onclick="_saveQLSettings()" style="width:100%;margin-top:16px;padding:12px;background:var(--ac);border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">儲存</button>
+  </div>`;
+  modal.addEventListener('click', e => { if(e.target===modal){modal.remove();_qlDraft=null;} });
+  document.body.appendChild(modal);
+}
+function _qlSettingsList(all) {
+  return all.map(p => {
+    const on = _qlDraft.includes(p);
+    return `<div class="ql-setting-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer">
+        <input type="checkbox" ${on?'checked':''} onchange="_qlToggle('${p}',this.checked)" style="width:16px;height:16px">
+        <span style="font-size:13px;color:var(--tx)">${p}</span>
+      </label>
+      <div style="display:flex;gap:4px">
+        <button onclick="_qlMove('${p}',-1)" style="background:var(--bg3);border:none;color:var(--tx2);width:28px;height:28px;border-radius:5px;cursor:pointer;font-size:13px">↑</button>
+        <button onclick="_qlMove('${p}',1)"  style="background:var(--bg3);border:none;color:var(--tx2);width:28px;height:28px;border-radius:5px;cursor:pointer;font-size:13px">↓</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function _qlToggle(p, on) {
+  if (!_qlDraft) return;
+  if (on && !_qlDraft.includes(p)) _qlDraft.push(p);
+  else if (!on) _qlDraft = _qlDraft.filter(x=>x!==p);
+}
+function _qlMove(p, dir) {
+  if (!_qlDraft) return;
+  const i = _qlDraft.indexOf(p);
+  if (i<0) return;
+  const j = i+dir;
+  if (j<0||j>=_qlDraft.length) return;
+  [_qlDraft[i],_qlDraft[j]]=[_qlDraft[j],_qlDraft[i]];
+  const list = document.getElementById('ql-list');
+  if (list) list.innerHTML = _qlSettingsList(currentUser?.pages||[]);
+}
+function _saveQLSettings() {
+  if (_qlDraft) _saveQL(_qlDraft);
+  _qlDraft = null;
+  document.getElementById('ql-modal')?.remove();
+  const g = document.getElementById('ql-grid');
+  if (g) g.innerHTML = _renderQLGrid();
 }
 
 async function clearCacheReload() {
