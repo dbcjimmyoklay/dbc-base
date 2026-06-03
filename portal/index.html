@@ -1158,29 +1158,37 @@ function renderCITable() {
   const rows = ciRawRows[ciCurArea];
   if (!rows) return;
 
-  /* 建立 日期 → 旅館 → 房號 的三層分組 */
+  /* 建立 日期 → 旅館 → 房號 的三層分組（保留 Sheet 行順序）*/
   const allDates = [];
-  const groups   = {};  // { date: { hotel: { room: [rows] } } }
-  let curDate    = '';
+  // groups[date] = { hotelOrder:[], hotels:{ hotel:{ roomOrder:[], rooms:{room:[rows]} } } }
+  const groups = {};
+  let curDate = '';
 
   for (const row of rows) {
     if (!Array.isArray(row) || row.every(c => !c)) continue;
     if (ciIsSep(row)) {
-      // 新格式 col0=空→日期在 col1；舊格式→日期在 col0
       const isNew = !String(row[0]).trim();
       curDate = isNew ? String(row[1] || '') : String(row[0] || '');
       if (!allDates.includes(curDate)) allDates.push(curDate);
-      if (!groups[curDate]) groups[curDate] = {};
+      if (!groups[curDate]) groups[curDate] = { hotelOrder:[], hotels:{} };
       continue;
     }
     if (!curDate) continue;
     if (ciCurDate && curDate !== ciCurDate) continue;
     const hotel  = String(row[0] || ''); if (!hotel) continue;
-    const roomNo = String(row[9] || '');  // 房號 index 9
-    if (!groups[curDate])               groups[curDate] = {};
-    if (!groups[curDate][hotel])        groups[curDate][hotel] = {};
-    if (!groups[curDate][hotel][roomNo]) groups[curDate][hotel][roomNo] = [];
-    groups[curDate][hotel][roomNo].push(row);
+    const roomNo = String(row[9] || '');
+
+    const grp = groups[curDate];
+    if (!grp.hotels[hotel]) {
+      grp.hotelOrder.push(hotel);
+      grp.hotels[hotel] = { roomOrder:[], rooms:{} };
+    }
+    const htl = grp.hotels[hotel];
+    if (!htl.rooms[roomNo]) {
+      htl.roomOrder.push(roomNo);
+      htl.rooms[roomNo] = [];
+    }
+    htl.rooms[roomNo].push(row);
   }
 
   /* 更新日期選單 */
@@ -1202,30 +1210,24 @@ function renderCITable() {
   let total = 0;
 
   for (const date of datesToShow) {
-    const hotelMap = groups[date]; if (!hotelMap) continue;
-    const hotels   = Object.keys(hotelMap);
+    const grp = groups[date]; if (!grp) continue;
     /* 分隔列 */
     const sepRow = rows.find(r => ciIsSep(r) && (!String(r[0]).trim() ? String(r[1]) : String(r[0])) === date);
     const wday   = sepRow ? String(!String(sepRow[0]).trim() ? sepRow[2] : sepRow[1]) : '';
-    const htlSummary = hotels.map(h => {
-      const cnt = Object.values(hotelMap[h]).flat().length;
+    const htlSummary = grp.hotelOrder.map(h => {
+      const cnt = grp.hotels[h].roomOrder.reduce((s,r) => s + grp.hotels[h].rooms[r].length, 0);
       return `${h} ${cnt}`;
     }).join(' ｜ ');
     html += `<div class="c-sep">${date}（${wday}）&nbsp;<span style="font-weight:400;font-size:11px;color:var(--tx2)">${htlSummary}</span></div>`;
 
-    for (const hotel of hotels) {
-      const roomMap  = hotelMap[hotel];
-      const htlCount = Object.values(roomMap).flat().length;
+    for (const hotel of grp.hotelOrder) {  // 照 Sheet 旅館出現順序
+      const htl = grp.hotels[hotel];
+      const htlCount = htl.roomOrder.reduce((s,r) => s + htl.rooms[r].length, 0);
       html += `<div class="ci-hotel"><span>${hotel}</span><span class="ci-hotel-count">${htlCount}人</span></div>`;
 
-      const rooms = Object.keys(roomMap).sort((a,b) => {
-        if (!a) return 1; if (!b) return -1;
-        return a.localeCompare(b, undefined, {numeric:true});
-      });
-      for (const room of rooms) {
-        const roomRows = roomMap[room];
-        const roomType = String(roomRows[0][10] || ''); // 房型 index 10
-        // 只顯示房型（row[10]），空白一律顯示「待安排」，永不顯示房號
+      for (const room of htl.roomOrder) {  // 照 Sheet 房號出現順序
+        const roomRows = htl.rooms[room];
+        const roomType = String(roomRows[0][10] || '');
         if (!roomType) {
           html += `<div class="ci-room pending">▎ 待安排</div>`;
         } else {
