@@ -362,6 +362,13 @@ def _writeback_to_course(sh, ws_course, booking_info_map):
         print("    找不到「項目」或「訂編」欄，略過")
         return
 
+    # 同樣建立「只用訂編」的索引，讓同訂單所有旅客都能找到旅館
+    booking_by_ding = {}
+    for key, info in booking_info_map.items():
+        ding_part = key.split('_')[0]
+        if ding_part not in booking_by_ding:
+            booking_by_ding[ding_part] = info
+
     updates = []    # list of (row_number_1based, col_1based, value)
 
     for row_idx, row in enumerate(all_vals[2:], 3):  # 第3列起，row_idx 1-based
@@ -381,11 +388,13 @@ def _writeback_to_course(sh, ws_course, booking_info_map):
         if '野澤' not in item_orig and '野澤' not in item_now:
             continue
 
+        # 精確匹配（訂編+姓名），找不到再用訂編查（同訂單所有旅客都更新）
         bk_key = f"{ding}_{cn}" if cn else f"{ding}_en_{en}"
-        if bk_key not in booking_info_map:
+        bk     = booking_info_map.get(bk_key) or booking_by_ding.get(ding)
+        if not bk:
             continue
 
-        hotel = booking_info_map[bk_key].get('旅館', '')
+        hotel = bk.get('旅館', '')
         if not hotel:
             continue
 
