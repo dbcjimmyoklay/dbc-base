@@ -1059,8 +1059,12 @@ let ciCurArea = 'nozawa';
 let ciCurDate = '';
 
 function ciIsSep(row) {
-  // col0=空, col1=日期, col2=曜日
-  return Array.isArray(row) && row.length >= 3 && !String(row[0]).trim() && WEEKDAY_SET.has(String(row[2]));
+  if (!Array.isArray(row) || row.length < 2) return false;
+  // 新格式：col0=空, col1=日期, col2=曜日
+  if (!String(row[0]).trim() && row.length >= 3 && WEEKDAY_SET.has(String(row[2]))) return true;
+  // 舊格式（sheet 尚未更新前）：col0=日期, col1=曜日
+  if (String(row[0]).trim() && WEEKDAY_SET.has(String(row[1]))) return true;
+  return false;
 }
 
 function renderCheckin(area) {
@@ -1162,7 +1166,9 @@ function renderCITable() {
   for (const row of rows) {
     if (!Array.isArray(row) || row.every(c => !c)) continue;
     if (ciIsSep(row)) {
-      curDate = String(row[1] || '');  // col1=日期
+      // 新格式 col0=空→日期在 col1；舊格式→日期在 col0
+      const isNew = !String(row[0]).trim();
+      curDate = isNew ? String(row[1] || '') : String(row[0] || '');
       if (!allDates.includes(curDate)) allDates.push(curDate);
       if (!groups[curDate]) groups[curDate] = {};
       continue;
@@ -1199,8 +1205,8 @@ function renderCITable() {
     const hotelMap = groups[date]; if (!hotelMap) continue;
     const hotels   = Object.keys(hotelMap);
     /* 分隔列 */
-    const sepRow   = rows.find(r => ciIsSep(r) && String(r[1]) === date);
-    const wday     = sepRow ? String(sepRow[2]) : '';  // col2=曜日
+    const sepRow = rows.find(r => ciIsSep(r) && (!String(r[0]).trim() ? String(r[1]) : String(r[0])) === date);
+    const wday   = sepRow ? String(!String(sepRow[0]).trim() ? sepRow[2] : sepRow[1]) : '';
     const htlSummary = hotels.map(h => {
       const cnt = Object.values(hotelMap[h]).flat().length;
       return `${h} ${cnt}`;
