@@ -380,10 +380,10 @@ body {
 .c-sep {
   position:-webkit-sticky; position:sticky; left:0; z-index:3;
   width:100%;
-  background:#071e3d;
-  color:#fff; font-weight:700; font-size:12.5px;
+  background:#0f3060;
+  color:#a8d8ff; font-weight:700; font-size:12.5px;
   padding:8px 14px;
-  border-top:3px solid var(--ac); border-bottom:2px solid var(--bd2);
+  border-top:3px solid #2a7fc0; border-bottom:2px solid #1a5a8a;
   letter-spacing:.3px;
 }
 
@@ -1059,7 +1059,8 @@ let ciCurArea = 'nozawa';
 let ciCurDate = '';
 
 function ciIsSep(row) {
-  return Array.isArray(row) && WEEKDAY_SET.has(String(row[1]));
+  // col0=空, col1=日期, col2=曜日
+  return Array.isArray(row) && row.length >= 3 && !String(row[0]).trim() && WEEKDAY_SET.has(String(row[2]));
 }
 
 function renderCheckin(area) {
@@ -1161,7 +1162,7 @@ function renderCITable() {
   for (const row of rows) {
     if (!Array.isArray(row) || row.every(c => !c)) continue;
     if (ciIsSep(row)) {
-      curDate = String(row[0] || '');
+      curDate = String(row[1] || '');  // col1=日期
       if (!allDates.includes(curDate)) allDates.push(curDate);
       if (!groups[curDate]) groups[curDate] = {};
       continue;
@@ -1198,8 +1199,8 @@ function renderCITable() {
     const hotelMap = groups[date]; if (!hotelMap) continue;
     const hotels   = Object.keys(hotelMap);
     /* 分隔列 */
-    const sepRow   = rows.find(r => ciIsSep(r) && String(r[0]) === date);
-    const wday     = sepRow ? String(sepRow[1]) : '';
+    const sepRow   = rows.find(r => ciIsSep(r) && String(r[1]) === date);
+    const wday     = sepRow ? String(sepRow[2]) : '';  // col2=曜日
     const htlSummary = hotels.map(h => {
       const cnt = Object.values(hotelMap[h]).flat().length;
       return `${h} ${cnt}`;
@@ -1218,12 +1219,11 @@ function renderCITable() {
       for (const room of rooms) {
         const roomRows = roomMap[room];
         const roomType = String(roomRows[0][10] || ''); // 房型 index 10
-        // sub-header 顯示 房型，房號只作分組用途不顯示
-        if (!room && !roomType) {
+        // 只顯示房型（row[10]），空白一律顯示「待安排」，永不顯示房號
+        if (!roomType) {
           html += `<div class="ci-room pending">▎ 待安排</div>`;
         } else {
-          const label = roomType || room; // 優先顯示房型，沒有才用房號
-          html += `<div class="ci-room">▎ ${label}</div>`;
+          html += `<div class="ci-room">▎ ${roomType}</div>`;
         }
         for (const row of roomRows) {
           const orderNo = String(row[4] || '');

@@ -241,13 +241,19 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
             hotel = row[0]  # 項目欄（index 0）
             if hotel:
                 hotel_counts[hotel] = hotel_counts.get(hotel, 0) + 1
-        count_str = '  '.join(f"{h} {c}人" for h, c in hotel_counts.items())
 
-        # 分隔列：日期 | 曜日 | 旅館小計
+        # 分隔列：col0=空、col1=日期、col2=曜日、col3+=旅館縮寫/人數交替
+        # 旅館縮寫：取前兩個字（如 sakaya→sa、常盤屋→常盤、olive包棟→ol）
         sep    = [''] * n
-        sep[0] = date_str
-        sep[1] = wday
-        sep[2] = count_str   # 泊數欄存旅館小計（分隔列不用實際泊數）
+        sep[0] = ''          # 項目：留空
+        sep[1] = date_str    # 出發日期
+        sep[2] = wday        # 曜日（泊數欄位）
+        for i, (hotel, count) in enumerate(hotel_counts.items()):
+            abbrev   = hotel[:2]       # 前兩個字
+            col_abbr = 3 + i * 2
+            col_cnt  = 4 + i * 2
+            if col_abbr < n: sep[col_abbr] = abbrev
+            if col_cnt  < n: sep[col_cnt]  = str(count)
         write_rows.append(sep)
         write_rows.extend(rows)
 
