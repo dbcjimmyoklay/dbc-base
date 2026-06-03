@@ -135,13 +135,13 @@ ROOM_EXCLUDE_ITEMS = {'湯澤純課'}
 
 # 入住單
 CHECKIN_COLS = [
-    '項目', '出發日期', '泊數', '訂編',
+    '項目', '出發日期', '泊數', '天數', '訂編',
     '中文姓名', '英文姓名', '性別', '年齡',
     '房號', '房型', '序號', '分房備註', '入住備註', '飲食', 'OP備註',
 ]
 CHECKIN_HEADERS     = CHECKIN_COLS
 CHECKIN_MANUAL_COLS = {'房號', '房型', '序號', '入住備註'}  # 分房備註/飲食/OP備註 自動帶入
-CHECKIN_IMPORTANT_COLS = {'出發日期', '泊數', '項目'}
+CHECKIN_IMPORTANT_COLS = {'出發日期', '泊數', '天數', '項目'}
 CHECKIN_CENTER_COLS = {
     '項目', '出發日期', '泊數', '訂編',
     '中文姓名', '英文姓名', '性別', '年齡',
