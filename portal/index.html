@@ -363,16 +363,16 @@ body {
 
 .course-body { flex:1; overflow:auto; font-size:12px; }
 
-/* 表頭列 — sticky top，跟著左右滑 */
+/* 表頭列 — Grid，sticky top，grid-template-columns 由 JS inline 設定 */
 .c-hdr-row {
-  display:flex; position:-webkit-sticky; position:sticky; top:0; z-index:5;
+  display:grid; position:-webkit-sticky; position:sticky; top:0; z-index:5;
   width:max-content; min-width:100%;
   background:var(--bg1); border-bottom:2px solid var(--bd2);
 }
 .c-hdr {
-  flex-shrink:0; padding:5px 5px;
+  padding:5px 5px;
   font-size:10.5px; font-weight:600; color:var(--tx3);
-  white-space:nowrap; overflow:visible;
+  white-space:nowrap; overflow:hidden;
   display:flex; align-items:center;
 }
 
@@ -399,10 +399,10 @@ body {
 .c-order { font-size:10px; color:var(--tx3); font-family:monospace; margin-right:7px; }
 .c-name  { font-size:12px; font-weight:500; color:var(--tx2); }
 
-/* 資料列 — flex row，跟著左右滑 */
-.c-data-row { display:flex; width:max-content; min-width:100%; }
+/* 資料列 — Grid，grid-template-columns 由 JS inline 設定（與表頭一致）*/
+.c-data-row { display:grid; width:max-content; min-width:100%; }
 .c-cell {
-  flex-shrink:0; padding:5px 7px; white-space:nowrap; overflow:hidden;
+  padding:5px 7px; white-space:nowrap; overflow:hidden;
   border-bottom:1px solid var(--bd); background:var(--bg0); color:var(--tx);
   display:flex; align-items:center; justify-content:center;
 }
@@ -733,21 +733,18 @@ window.onload = () => {
   /* Google silent auth（背景刷新 token）*/
   google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onCredential, auto_select: true });
 
-  /* 有快取 session → 直接顯示 app */
+  /* 有快取 session → 直接顯示 app，完全不彈 Google 登入提示 */
   const sess = _loadSess();
   if (sess) {
-    currentUser = sess.user;
-    idToken     = sess.token;
-    // Token 55 分鐘內：直接用，不需等待 → 完全不卡登入畫面
-    // Token 超過 55 分鐘：等 Google 靜默刷新後才能呼叫 API
-    needsTokenRefresh = !_isTokenFresh();
+    currentUser       = sess.user;
+    idToken           = sess.token;
+    needsTokenRefresh = false; // 直接嘗試用快取 token，失敗再提示
     hide('login-screen');
     showApp();
-    // 背景靜默刷新（不阻塞 UI）
-    google.accounts.id.prompt();
+    // 不呼叫 prompt()，不顯示任何 Google UI
   } else {
     show('login-screen', 'flex');
-    google.accounts.id.prompt();
+    google.accounts.id.prompt(); // 只有第一次沒有 session 才顯示
   }
 };
 
@@ -879,31 +876,21 @@ async function loadCourse() {
       return;
     }
   } catch(e) {}
-  /* token 可能過期 → 先等 Google 靜默刷新，最多等 4 秒 */
-  if (needsTokenRefresh) {
-    const body = document.getElementById('course-body');
-    if (body) {
-      body.dataset.waiting = '1';
-      body.innerHTML = '<div class="loading"><div class="spin"></div> 驗證中...</div>';
-      // 4 秒後若還沒刷新，顯示重新登入
-      setTimeout(() => {
-        if (body.dataset.waiting === '1') {
-          body.dataset.waiting = '';
-          body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3);line-height:2.4">
-            驗證已過期<br>
-            <button onclick="signOut()" style="margin-top:8px;padding:8px 22px;background:var(--ac);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-family:inherit">重新登入</button>
-          </div>`;
-        }
-      }, 4000);
-    }
-    return; // onCredential 會在收到新 token 後自動重呼叫 loadCourse
-  }
-
-  /* 重新抓取 */
+  /* 直接嘗試抓取，token 過期時顯示重新登入按鈕 */
   try {
     const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCourse`, {redirect:'follow'});
     const data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.message || '伺服器錯誤');
+    if (data.status !== 'ok') {
+      if (data.message?.includes('Token') || data.message?.includes('未授權')) {
+        const body = document.getElementById('course-body');
+        if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3);line-height:2.4">
+          登入已過期<br>
+          <button onclick="signOut()" style="margin-top:8px;padding:8px 22px;background:var(--ac);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-family:inherit">重新登入</button>
+        </div>`;
+        return;
+      }
+      throw new Error(data.message || '伺服器錯誤');
+    }
     cRawRows = data.rows || [];
     try {
       localStorage.setItem(COURSE_CACHE_KEY, JSON.stringify(cRawRows));
@@ -957,11 +944,12 @@ function renderCTable() {
     else if (cur) cur.rows.push(row);
   }
 
-  /* 表頭列（sticky top，直接放進 course-body） */
-  let html = `<div class="c-hdr-row">`;
+  /* 表頭列 + 資料列共用相同的 grid-template-columns → 欄寬完全對齊 */
+  const gridCols = colIdxs.map(ci => C_META[ci][1] + 'px').join(' ');
+  let html = `<div class="c-hdr-row" style="grid-template-columns:${gridCols}">`;
   colIdxs.forEach(ci => {
-    const [name, w, align] = C_META[ci];
-    html += `<div class="c-hdr" style="width:${w}px;min-width:${w}px;justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
+    const [name, , align] = C_META[ci];
+    html += `<div class="c-hdr" style="justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
   });
   html += '</div>';
 
@@ -988,10 +976,10 @@ function renderCTable() {
       const sc      = cAreaColor(i1);
 
       html += `<div class="c-label${sc?' '+sc:''}"><span class="c-order">${orderNo}</span><span class="c-name">${name}</span></div>`;
-      html += '<div class="c-data-row">';
+      html += `<div class="c-data-row" style="grid-template-columns:${gridCols}">`;
       colIdxs.forEach(ci => {
         const val = String(row[ci] ?? '');
-        const [, w, align] = C_META[ci];
+        const [, , align] = C_META[ci];
         let cls = 'c-cell' + (align === 'left' ? ' c-left' : '');
         if (ci === CI['Lv']) {
           const lv = val.toLowerCase();
@@ -1001,7 +989,7 @@ function renderCTable() {
         if (ci===CI['類別'] && val==='雙板') cls += ' td-board';
         if (ci===CI['天數'] && val.includes('含')) cls += ' td-incl';
         if (ci===CI['註記'] && val==='專屬')  cls += ' td-spec';
-        html += `<div class="${cls}" style="width:${w}px;min-width:${w}px">${val}</div>`;
+        html += `<div class="${cls}">${val}</div>`;
       });
       html += '</div>';
     }
