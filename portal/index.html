@@ -413,6 +413,26 @@ body {
 .td-board { color:#36c4c4 !important; }
 .td-incl  { color:#f0f060 !important; }
 .td-spec  { color:#f0f060 !important; font-weight:600; }
+
+/* ── 入住單：旅館 Header ── */
+.ci-hotel {
+  position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%;
+  background:#001a35; color:var(--tx); font-weight:700; font-size:13px;
+  padding:9px 14px 7px; border-top:1px solid var(--bd2);
+  display:flex; align-items:center; gap:8px;
+}
+.ci-hotel-count {
+  font-size:11px; font-weight:400; color:var(--tx2);
+  background:var(--bg3); padding:2px 8px; border-radius:10px;
+}
+
+/* ── 入住單：房號 Sub-header ── */
+.ci-room {
+  position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%;
+  background:#000e20; color:#5ba3d4; font-size:12px; font-weight:500;
+  padding:5px 20px; border-left:3px solid #2a7fc0; border-bottom:1px solid var(--bd);
+}
+.ci-room.pending { color:var(--tx3); border-left-color:var(--tx3); }
 </style>
 </head>
 <body>
@@ -644,7 +664,10 @@ function go(page) {
   document.getElementById('page-title').textContent = page;
   closeSidebar();
 
-  if (page === '課程安排') { renderCourse(); return; }
+  if (page === '課程安排')    { renderCourse(); return; }
+  if (page === '入住單－野澤') { renderCheckin('nozawa');    return; }
+  if (page === '入住單－斑尾') { renderCheckin('madarao');   return; }
+  if (page === '入住單－龍平') { renderCheckin('yongpyong'); return; }
 
   const pc = document.getElementById('page-content');
   pc.className = 'page';
@@ -996,6 +1019,214 @@ function renderCTable() {
   }
 
   if (!total) html += `<div class="c-label" style="padding:32px;color:var(--tx3)">此期間無資料</div>`;
+  body.innerHTML = html;
+}
+
+/* ════════════════════════════════
+   CHECKIN PAGE（入住單）
+════════════════════════════════ */
+const CI_META = {
+  1: ['出發日期', 66,'center'],
+  2: ['泊數',    38,'center'],
+  3: ['天數',    38,'center'],
+  6: ['英文姓名',100,'left'],
+  7: ['性別',    38,'center'],
+  8: ['年齡',    38,'center'],
+  9: ['房號',    42,'center'],
+ 11: ['序號',    38,'center'],
+ 10: ['房型',    60,'left'],
+ 13: ['入住備註',110,'left'],
+};
+const CI_COLS = [1,2,3,6,7,8,9,11,10,13];
+const CI_CACHE_TTL = 15 * 60 * 1000;
+const CI_AREA_NAME = { nozawa:'野澤', madarao:'斑尾', yongpyong:'龍平' };
+
+let ciRawRows = {};
+let ciCurArea = 'nozawa';
+let ciCurDate = '';
+
+function ciIsSep(row) {
+  return Array.isArray(row) && WEEKDAY_SET.has(String(row[1]));
+}
+
+function renderCheckin(area) {
+  ciCurArea = area;
+  const pc = document.getElementById('page-content');
+  pc.className = 'course-page';
+  const aName = CI_AREA_NAME[area] || area;
+  pc.innerHTML = `
+    <div class="course-toolbar">
+      <div class="toolbar-row">
+        <span class="toolbar-lbl">日期</span>
+        <select id="ci-date-sel" onchange="ciFilterDate(this.value)"
+          style="padding:4px 10px;border-radius:7px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx2);font-size:12px;">
+          <option value="">全部日期</option>
+        </select>
+        <button class="c-tab" onclick="ciSetToday()" style="padding:4px 12px;font-size:12px">今天</button>
+        <button class="c-view c-refresh" onclick="refreshCheckin()" style="margin-left:auto">↺</button>
+      </div>
+    </div>
+    <div class="course-body" id="ci-body">
+      <div class="loading"><div class="spin"></div> 載入中</div>
+    </div>`;
+  if (ciRawRows[area]) renderCITable();
+  else loadCheckin(area);
+}
+
+function ciFilterDate(date) {
+  ciCurDate = date;
+  renderCITable();
+}
+
+function ciSetToday() {
+  const t = new Date();
+  const mm = String(t.getMonth()+1).padStart(2,'0');
+  const dd = String(t.getDate()).padStart(2,'0');
+  const yy = String(t.getFullYear()).slice(2);
+  const today = `${yy}/${mm}/${dd}`;
+  const sel = document.getElementById('ci-date-sel');
+  if (!sel) return;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === today) {
+      sel.value = today; ciCurDate = today; renderCITable(); return;
+    }
+  }
+}
+
+async function loadCheckin(area) {
+  const body = document.getElementById('ci-body');
+  try {
+    const ck = localStorage.getItem('dbc_ci_' + area);
+    const ts = parseInt(localStorage.getItem('dbc_ci_' + area + '_ts') || '0');
+    if (ck && Date.now() - ts < CI_CACHE_TTL) {
+      ciRawRows[area] = JSON.parse(ck); renderCITable(); return;
+    }
+  } catch(e) {}
+  try {
+    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCheckin&area=${area}`, {redirect:'follow'});
+    const data = await res.json();
+    if (data.status !== 'ok') {
+      if (data.message?.includes('Token') || data.message?.includes('未授權')) {
+        if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3);line-height:2.4">登入已過期<br>
+          <button onclick="signOut()" style="margin-top:8px;padding:8px 22px;background:var(--ac);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-family:inherit">重新登入</button></div>`;
+        return;
+      }
+      throw new Error(data.message || '伺服器錯誤');
+    }
+    ciRawRows[area] = data.rows || [];
+    try {
+      localStorage.setItem('dbc_ci_' + area, JSON.stringify(ciRawRows[area]));
+      localStorage.setItem('dbc_ci_' + area + '_ts', String(Date.now()));
+    } catch(e) {}
+    renderCITable();
+  } catch(e) {
+    try {
+      const stale = localStorage.getItem('dbc_ci_' + ciCurArea);
+      if (stale) { ciRawRows[ciCurArea] = JSON.parse(stale); renderCITable(); return; }
+    } catch(e2) {}
+    if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3)">載入失敗：${e.message}</div>`;
+  }
+}
+
+async function refreshCheckin() {
+  try { localStorage.removeItem('dbc_ci_'+ciCurArea); localStorage.removeItem('dbc_ci_'+ciCurArea+'_ts'); } catch(e) {}
+  delete ciRawRows[ciCurArea];
+  renderCheckin(ciCurArea);
+}
+
+function renderCITable() {
+  const body = document.getElementById('ci-body');
+  if (!body) return;
+  const rows = ciRawRows[ciCurArea];
+  if (!rows) return;
+
+  /* 建立 日期 → 旅館 → 房號 的三層分組 */
+  const allDates = [];
+  const groups   = {};  // { date: { hotel: { room: [rows] } } }
+  let curDate    = '';
+
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.every(c => !c)) continue;
+    if (ciIsSep(row)) {
+      curDate = String(row[0] || '');
+      if (!allDates.includes(curDate)) allDates.push(curDate);
+      if (!groups[curDate]) groups[curDate] = {};
+      continue;
+    }
+    if (!curDate) continue;
+    if (ciCurDate && curDate !== ciCurDate) continue;
+    const hotel  = String(row[0] || ''); if (!hotel) continue;
+    const roomNo = String(row[9] || '');  // 房號 index 9
+    if (!groups[curDate])               groups[curDate] = {};
+    if (!groups[curDate][hotel])        groups[curDate][hotel] = {};
+    if (!groups[curDate][hotel][roomNo]) groups[curDate][hotel][roomNo] = [];
+    groups[curDate][hotel][roomNo].push(row);
+  }
+
+  /* 更新日期選單 */
+  const sel = document.getElementById('ci-date-sel');
+  if (sel) {
+    sel.innerHTML = '<option value="">全部日期</option>' +
+      allDates.map(d => `<option value="${d}"${d===ciCurDate?' selected':''}>${d}</option>`).join('');
+  }
+
+  const gridCols = CI_COLS.map(ci => CI_META[ci][1] + 'px').join(' ');
+  let html = `<div class="c-hdr-row" style="grid-template-columns:${gridCols}">`;
+  CI_COLS.forEach(ci => {
+    const [name,,align] = CI_META[ci];
+    html += `<div class="c-hdr" style="justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
+  });
+  html += '</div>';
+
+  const datesToShow = ciCurDate ? [ciCurDate] : allDates;
+  let total = 0;
+
+  for (const date of datesToShow) {
+    const hotelMap = groups[date]; if (!hotelMap) continue;
+    const hotels   = Object.keys(hotelMap);
+    /* 分隔列 */
+    const sepRow   = rows.find(r => ciIsSep(r) && String(r[0]) === date);
+    const wday     = sepRow ? String(sepRow[1]) : '';
+    const htlSummary = hotels.map(h => {
+      const cnt = Object.values(hotelMap[h]).flat().length;
+      return `${h} ${cnt}`;
+    }).join(' ｜ ');
+    html += `<div class="c-sep">${date}（${wday}）&nbsp;<span style="font-weight:400;font-size:11px;color:var(--tx2)">${htlSummary}</span></div>`;
+
+    for (const hotel of hotels) {
+      const roomMap  = hotelMap[hotel];
+      const htlCount = Object.values(roomMap).flat().length;
+      html += `<div class="ci-hotel"><span>${hotel}</span><span class="ci-hotel-count">${htlCount}人</span></div>`;
+
+      const rooms = Object.keys(roomMap).sort((a,b) => {
+        if (!a) return 1; if (!b) return -1;
+        return a.localeCompare(b, undefined, {numeric:true});
+      });
+      for (const room of rooms) {
+        const roomRows = roomMap[room];
+        const roomType = String(roomRows[0][10] || ''); // 房型 index 10
+        if (!room) {
+          html += `<div class="ci-room pending">▎ 待安排</div>`;
+        } else {
+          html += `<div class="ci-room">▎ ${room}${roomType?' &nbsp; '+roomType:''}</div>`;
+        }
+        for (const row of roomRows) {
+          const orderNo = String(row[4] || '');
+          const name    = String(row[5] || '');
+          html += `<div class="c-label"><span class="c-order">${orderNo}</span><span class="c-name">${name}</span></div>`;
+          html += `<div class="c-data-row" style="grid-template-columns:${gridCols}">`;
+          CI_COLS.forEach(ci => {
+            const val   = String(row[ci] ?? '');
+            const [,,align] = CI_META[ci];
+            html += `<div class="c-cell${align==='left'?' c-left':''}">${val}</div>`;
+          });
+          html += '</div>';
+          total++;
+        }
+      }
+    }
+  }
+  if (!total) html += `<div class="c-label" style="padding:32px;color:var(--tx3);text-align:center">此期間無資料</div>`;
   body.innerHTML = html;
 }
 </script>
