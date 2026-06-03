@@ -961,7 +961,7 @@ function renderCTable() {
   let html = `<div class="c-hdr-row">`;
   colIdxs.forEach(ci => {
     const [name, w, align] = C_META[ci];
-    html += `<div class="c-hdr" style="width:${w}px;justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
+    html += `<div class="c-hdr" style="width:${w}px;min-width:${w}px;justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
   });
   html += '</div>';
 
@@ -1001,7 +1001,7 @@ function renderCTable() {
         if (ci===CI['類別'] && val==='雙板') cls += ' td-board';
         if (ci===CI['天數'] && val.includes('含')) cls += ' td-incl';
         if (ci===CI['註記'] && val==='專屬')  cls += ' td-spec';
-        html += `<div class="${cls}" style="width:${w}px">${val}</div>`;
+        html += `<div class="${cls}" style="width:${w}px;min-width:${w}px">${val}</div>`;
       });
       html += '</div>';
     }
