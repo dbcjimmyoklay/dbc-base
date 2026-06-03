@@ -163,33 +163,41 @@ def _read_existing_checkin(ws_ci):
 def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
                         booking_info_map, is_nozawa):
     """
-    建立單一入住單的寫入列
-    is_nozawa=True 時從 booking_info_map 補旅館名稱
-    訂房表只記錄一位名字，但同訂編的所有旅客都要帶入旅館資訊
+    建立單一入住單的寫入列（兩階段）
+    Stage 1：按日期收集資料列，計算旅館人數
+    Stage 2：輸出含旅館小計的分隔列 + 資料列
     """
-    write_rows = []
-    n          = len(CHECKIN_COLS)
+    n = len(CHECKIN_COLS)
 
-    # 建立「只用訂編」查找的索引，讓同訂單所有旅客都能找到旅館
+    # 訂編索引：讓同訂單所有旅客都能找到旅館
     booking_by_ding = {}
     for key, info in booking_info_map.items():
         ding_part = key.split('_')[0]
         if ding_part not in booking_by_ding:
             booking_by_ding[ding_part] = info
 
+    # ── Stage 1：按日期分組收集 ──
+    date_keys = []                    # [(date_str, wday), ...]
+    date_data  = {}                   # { date_str: [row_data, ...] }
+    cur_date   = None
+
     for item in all_sheet_rows:
         if item['_is_separator']:
-            sep    = [''] * n
-            src    = item['_data']
-            sep[0] = src[1]              # 日期（第1欄）
-            sep[1] = src[2]              # 曜日（第2欄）
-            write_rows.append(sep)
+            src      = item['_data']
+            date_str = str(src[1])    # 日期
+            wday     = str(src[2])    # 曜日
+            cur_date = date_str
+            if date_str not in date_data:
+                date_keys.append((date_str, wday))
+                date_data[date_str] = []
+            continue
+
+        if cur_date is None:
             continue
 
         r = item['_data']
         if not r.get('訂編', ''):
             continue
-
         item_val = r.get('項目', '')
         if not include_fn(item_val):
             continue
@@ -199,21 +207,19 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
         en         = r.get('英文姓名', '')
         visitor_id = r.get('旅客編號', '')
 
-        # ── key 與手動欄位保留 ──
         ci_key = f"v_{visitor_id}" if visitor_id else f"{ding}_{cn}"
         bk_key = f"{ding}_{cn}"    if cn          else f"{ding}_en_{en}"
 
-        r_out = dict(r)              # 不污染原始 r
+        r_out = dict(r)
 
-        # 保留現有手動欄位
+        # 保留手動欄位
         if ci_key in existing_ci_map:
             old = existing_ci_map[ci_key]
             for mc in CHECKIN_MANUAL_COLS:
                 if mc in old and old[mc]:
                     r_out[mc] = old[mc]
 
-        # ── 野澤：從訂房表補旅館名稱（同訂編所有旅客都更新）──
-        # 先精確匹配（訂編+姓名），再用訂編查（訂房表只寫一個名字）
+        # 野澤：同訂編所有旅客都帶入旅館名稱
         if is_nozawa:
             bk = booking_info_map.get(bk_key) or booking_by_ding.get(ding)
             if bk:
@@ -222,7 +228,28 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
                     r_out['項目'] = hotel
 
         row_data = [str(r_out.get(c, '') or '') for c in CHECKIN_COLS]
-        write_rows.append(row_data)
+        date_data[cur_date].append(row_data)
+
+    # ── Stage 2：輸出分隔列（含旅館小計）+ 資料列 ──
+    write_rows = []
+    for date_str, wday in date_keys:
+        rows = date_data.get(date_str, [])
+
+        # 計算旅館人數小計
+        hotel_counts = {}
+        for row in rows:
+            hotel = row[0]  # 項目欄（index 0）
+            if hotel:
+                hotel_counts[hotel] = hotel_counts.get(hotel, 0) + 1
+        count_str = '  '.join(f"{h} {c}人" for h, c in hotel_counts.items())
+
+        # 分隔列：日期 | 曜日 | 旅館小計
+        sep    = [''] * n
+        sep[0] = date_str
+        sep[1] = wday
+        sep[2] = count_str   # 泊數欄存旅館小計（分隔列不用實際泊數）
+        write_rows.append(sep)
+        write_rows.extend(rows)
 
     return write_rows
 
