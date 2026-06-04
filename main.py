@@ -117,10 +117,16 @@ def run_agent(name, fn, *args, **kwargs):
 # 主流程
 # ═══════════════════════════════════════════
 
+def run_checkout():
+    """送客單：每日流程自動觸發（COURSE 之後）"""
+    from agents.checkout import run as checkout_run
+    run_agent('CHECKOUT 送客員', checkout_run)
+
+
 def run_daily(skip_watcher=False, skip_reporter=False):
     """
     每日自動流程：
-    CLEANER → COURSE → WATCHER → ROOM → REPORTER → 完整大表.xlsx
+    CLEANER → COURSE → CHECKOUT → WATCHER → REPORTER → 完整大表.xlsx
     """
     from agents.cleaner  import run as cleaner_run
     from agents.course   import run as course_run
@@ -149,7 +155,7 @@ def run_daily(skip_watcher=False, skip_reporter=False):
     else:
         print("\n  -- 略過 WATCHER --")
 
-    # 4. REPORTER
+    # 5. REPORTER
     if not skip_reporter:
         ok, _, _ = run_agent('REPORTER 報表員', reporter_run, cleaner_output)
         results['reporter'] = ok
@@ -201,6 +207,7 @@ def main():
     # --room 已移除（房務表功能已整併入入住單）
     parser.add_argument('--reporter', action='store_true', help='只執行 REPORTER 報表員')
     parser.add_argument('--checkin',  action='store_true', help='執行 CHECKIN 入住員（手動觸發）')
+    parser.add_argument('--checkout', action='store_true', help='只執行 CHECKOUT 送客員')
     parser.add_argument('--all',      action='store_true', help='執行全部（含 CHECKIN）')
 
     # 略過某個工作員
@@ -233,6 +240,10 @@ def main():
         run_checkin()
         return
 
+    if args.checkout:
+        run_checkout()
+        return
+
     # ── 全部（含 CHECKIN）──
     if args.all:
         results = run_daily(
@@ -246,7 +257,6 @@ def main():
     # ── 預設：每日自動流程 ──
     run_daily(
         skip_watcher  = args.skip_watcher,
-        skip_room     = args.skip_room,
         skip_reporter = args.skip_reporter,
     )
 

@@ -30,10 +30,38 @@ SHEET_CHANGE  = '異動紀錄'
 # 入住單（gid 已在 CHECKIN_SHEETS 定義）
 # 送客單
 CHECKOUT_SHEETS = [
-    {'name': '野澤送客單26/27', 'include': lambda item: '野澤' in item and '純課' not in item},
-    {'name': '斑尾送客單26/27', 'include': lambda item: '斑尾' in item and '純課' not in item},
-    {'name': '龍平送客單26/27', 'include': lambda item: '龍平' in item},
+    {'name': '野澤送客單26/27', 'include': lambda item1: '野澤' in item1 and '純課' not in item1},
+    {'name': '斑尾送客單26/27', 'include': lambda item1: '斑尾' in item1 and '純課' not in item1},
+    {'name': '龍平送客單26/27', 'include': lambda item1: '龍平' in item1},
 ]
+
+# 送客單欄位（index 對應 Portal CO_META）
+CHECKOUT_COLS = [
+    '項目',       # 0  地區/旅館（過濾用，portal 不顯示於 grid）
+    '退房日期',   # 1  計算值 = 出發日期 + 泊數
+    '泊數',       # 2
+    '訂編',       # 3  label row
+    '中文姓名',   # 4  label row
+    '性別',       # 5
+    '年齡',       # 6
+    '出發日期',   # 7  原出發日（供對照）
+    '入住備註',   # 8  從入住單帶入（人工判斷車票數用）
+    '退房備註',   # 9  手動欄位
+    '旅客編號',   # 10 隱藏，keying 用
+]
+CHECKOUT_HEADERS     = CHECKOUT_COLS
+CHECKOUT_MANUAL_COLS = {'退房備註'}
+CHECKOUT_CENTER_COLS = {
+    '項目', '退房日期', '泊數', '訂編',
+    '中文姓名', '性別', '年齡', '出發日期',
+}
+CHECKOUT_COL_WIDTH = {
+    '項目': 60, '退房日期': 65, '泊數': 40,
+    '訂編': 45, '中文姓名': 70,
+    '性別': 35, '年齡': 35, '出發日期': 65,
+    '入住備註': 160, '退房備註': 130,
+    '旅客編號': 0,
+}
 
 # 車單
 SHEET_NAGANO_BUS = '長野車單'
@@ -137,10 +165,14 @@ ROOM_EXCLUDE_ITEMS = {'湯澤純課'}
 CHECKIN_COLS = [
     '項目', '出發日期', '泊數', '天數', '訂編',
     '中文姓名', '英文姓名', '性別', '年齡',
-    '房號', '房型', '序號', '分房備註', '入住備註', '飲食', 'OP備註',
+    '房號', '房型', '序號', '分房備註', '入住備註', '退房備註', '飲食', 'OP備註',
 ]
+# index 對應：
+#  0=項目  1=出發日期  2=泊數   3=天數    4=訂編
+#  5=中文姓名  6=英文姓名  7=性別  8=年齡
+#  9=房號  10=房型  11=序號  12=分房備註  13=入住備註  14=退房備註  15=飲食  16=OP備註
 CHECKIN_HEADERS     = CHECKIN_COLS
-CHECKIN_MANUAL_COLS = {'房號', '房型', '序號', '入住備註'}  # 分房備註/飲食/OP備註 自動帶入
+CHECKIN_MANUAL_COLS = {'房號', '房型', '序號', '入住備註', '退房備註'}
 CHECKIN_IMPORTANT_COLS = {'出發日期', '泊數', '天數', '項目'}
 CHECKIN_CENTER_COLS = {
     '項目', '出發日期', '泊數', '訂編',
@@ -224,7 +256,7 @@ CHECKIN_COL_WIDTH = {
     '訂編': 45, '中文姓名': 70, '英文姓名': 130,
     '性別': 35, '年齡': 35,
     '房號': 45, '房型': 80, '序號': 40,
-    '分房備註': 130, '入住備註': 130, '飲食': 80, 'OP備註': 130,
+    '分房備註': 130, '入住備註': 130, '退房備註': 130, '飲食': 80, 'OP備註': 130,
 }
 CHANGE_COL_WIDTHS = [65, 65, 65, 70, 55, 80, 80, 80, 80, 65]
 
