@@ -708,6 +708,9 @@ function go(page) {
   if (page === '入住單－野澤') { renderCheckin('nozawa');    return; }
   if (page === '入住單－斑尾') { renderCheckin('madarao');   return; }
   if (page === '入住單－龍平') { renderCheckin('yongpyong'); return; }
+  if (page === '送客單－野澤') { renderCheckout('nozawa');    return; }
+  if (page === '送客單－斑尾') { renderCheckout('madarao');   return; }
+  if (page === '送客單－龍平') { renderCheckout('yongpyong'); return; }
 
   const pc = document.getElementById('page-content');
   pc.className = 'page';
@@ -831,7 +834,63 @@ function toggleEquip(area, label) {
   if (btn) btn.textContent = `${label} ${_equipOpen[area]?'▾':'▸'}`;
   if (_equipOpen[area] && !el.dataset.loaded) {
     el.dataset.loaded = '1';
-    el.innerHTML = `<div style="color:var(--tx3);font-size:12px;padding:4px">送客單建置完成後顯示裝備歸還明細</div>`;
+    el.innerHTML = `<div style="color:var(--tx3);font-size:12px;padding:4px 0">載入中…</div>`;
+    _loadEquip(area, el);
+  }
+}
+
+async function _loadEquip(area, el) {
+  try {
+    const ck = localStorage.getItem('dbc_co_' + area);
+    const ts = parseInt(localStorage.getItem('dbc_co_' + area + '_ts') || '0');
+    let rows;
+    if (ck && Date.now() - ts < CO_CACHE_TTL) {
+      rows = JSON.parse(ck);
+    } else {
+      const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCheckout&area=${area}`, {redirect:'follow'});
+      const data = await res.json();
+      if (data.status !== 'ok') throw new Error(data.message || '伺服器錯誤');
+      rows = data.rows || [];
+      try {
+        localStorage.setItem('dbc_co_' + area, JSON.stringify(rows));
+        localStorage.setItem('dbc_co_' + area + '_ts', String(Date.now()));
+      } catch(e2) {}
+    }
+
+    /* 今日退房日期字串 YY/MM/DD */
+    const t = new Date();
+    const today = `${String(t.getFullYear()).slice(2)}/${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}`;
+
+    /* 逐列掃描，只看退房日期 = 今天的資料列
+       CHECKOUT_COLS: 0=項目, 1=退房日期, 2=泊數, 3=訂編, 4=中文姓名 */
+    let totalToday = 0;
+    let curDate    = '';
+    for (const row of rows) {
+      if (!Array.isArray(row)) continue;
+      if (!String(row[0]).trim() && row.length >= 3 && WEEKDAY_SET.has(String(row[2]))) {
+        curDate = String(row[1] || '');  continue;
+      }
+      if (String(row[0]).trim() && WEEKDAY_SET.has(String(row[1]))) {
+        curDate = String(row[0] || '');  continue;
+      }
+      if (curDate !== today) continue;
+      if (String(row[3] || '').trim()) totalToday++;  // 訂編有值 = 旅客列
+    }
+
+    if (!totalToday) {
+      el.innerHTML = `<div style="color:var(--tx3);font-size:12px;padding:4px 0">今日無退房旅客</div>`;
+      return;
+    }
+    el.innerHTML = `
+      <div class="equip-hotel-row">
+        <span style="font-weight:600">退房人數</span>
+        <span style="color:#60b3f4;font-weight:700">${totalToday}人</span>
+      </div>
+      <div class="equip-hotel-row" style="border-bottom:none">
+        <span style="color:var(--tx3);font-size:12px">下山巴士 ${totalToday}張&ensp;／&ensp;新幹線 ${totalToday}張</span>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--tx3);font-size:12px;padding:4px 0">載入失敗（${e.message}）</div>`;
   }
 }
 
@@ -1452,6 +1511,202 @@ function renderCITable() {
       }
     }
   }
+  if (!total) html += `<div class="c-label" style="padding:32px;color:var(--tx3);text-align:center">此期間無資料</div>`;
+  body.innerHTML = html;
+}
+
+/* ════════════════════════════════
+   CHECKOUT PAGE（送客單）
+════════════════════════════════ */
+/* CHECKOUT_COLS index：
+   0=項目, 1=退房日期, 2=泊數, 3=訂編(label), 4=中文姓名(label),
+   5=性別, 6=年齡, 7=出發日期, 8=入住備註, 9=退房備註, 10=旅客編號 */
+const CO_META = {
+  1: ['退房日期', 66,'center'],
+  2: ['泊數',    38,'center'],
+  5: ['性別',    38,'center'],
+  6: ['年齡',    38,'center'],
+  7: ['出發日期', 66,'center'],
+  8: ['入住備註', 140,'left'],
+  9: ['備註',   100,'left'],
+};
+const CO_COLS = [1, 2, 5, 6, 7, 8, 9];
+const CO_CACHE_TTL  = 15 * 60 * 1000;
+const CO_AREA_NAME  = { nozawa:'野澤', madarao:'斑尾', yongpyong:'龍平' };
+
+let coRawRows = {};
+let coCurArea = 'nozawa';
+let coCurDate = '';
+
+function coIsSep(row) {
+  if (!Array.isArray(row) || row.length < 2) return false;
+  if (!String(row[0]).trim() && row.length >= 3 && WEEKDAY_SET.has(String(row[2]))) return true;
+  if (String(row[0]).trim()  && WEEKDAY_SET.has(String(row[1]))) return true;
+  return false;
+}
+
+function renderCheckout(area) {
+  coCurArea = area;
+  const pc    = document.getElementById('page-content');
+  pc.className = 'course-page';
+  pc.innerHTML = `
+    <div class="course-toolbar">
+      <div class="toolbar-row">
+        <span class="toolbar-lbl">日期</span>
+        <select id="co-date-sel" onchange="coFilterDate(this.value)"
+          style="padding:4px 10px;border-radius:7px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx2);font-size:12px;">
+          <option value="">全部日期</option>
+        </select>
+        <button class="c-tab" onclick="coSetToday()" style="padding:4px 12px;font-size:12px">今天</button>
+        <button class="c-view c-refresh" onclick="refreshCheckout()" style="margin-left:auto">↺</button>
+      </div>
+    </div>
+    <div class="course-body" id="co-body">
+      <div class="loading"><div class="spin"></div> 載入中</div>
+    </div>`;
+  if (coRawRows[area]) renderCOTable();
+  else loadCheckout(area);
+}
+
+function coFilterDate(date) {
+  coCurDate = date;
+  renderCOTable();
+}
+
+function coSetToday() {
+  const t  = new Date();
+  const mm = String(t.getMonth()+1).padStart(2,'0');
+  const dd = String(t.getDate()).padStart(2,'0');
+  const yy = String(t.getFullYear()).slice(2);
+  const today = `${yy}/${mm}/${dd}`;
+  const sel   = document.getElementById('co-date-sel');
+  if (!sel) return;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === today) {
+      sel.value = today; coCurDate = today; renderCOTable(); return;
+    }
+  }
+}
+
+async function loadCheckout(area) {
+  const body = document.getElementById('co-body');
+  try {
+    const ck = localStorage.getItem('dbc_co_' + area);
+    const ts = parseInt(localStorage.getItem('dbc_co_' + area + '_ts') || '0');
+    if (ck && Date.now() - ts < CO_CACHE_TTL) {
+      coRawRows[area] = JSON.parse(ck); renderCOTable(); return;
+    }
+  } catch(e) {}
+  try {
+    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCheckout&area=${area}`, {redirect:'follow'});
+    const data = await res.json();
+    if (data.status !== 'ok') {
+      if (data.message?.includes('Token') || data.message?.includes('未授權')) {
+        if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3);line-height:2.4">登入已過期<br>
+          <button onclick="signOut()" style="margin-top:8px;padding:8px 22px;background:var(--ac);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-family:inherit">重新登入</button></div>`;
+        return;
+      }
+      throw new Error(data.message || '伺服器錯誤');
+    }
+    coRawRows[area] = data.rows || [];
+    try {
+      localStorage.setItem('dbc_co_' + area, JSON.stringify(coRawRows[area]));
+      localStorage.setItem('dbc_co_' + area + '_ts', String(Date.now()));
+    } catch(e) {}
+    renderCOTable();
+  } catch(e) {
+    try {
+      const stale = localStorage.getItem('dbc_co_' + coCurArea);
+      if (stale) { coRawRows[coCurArea] = JSON.parse(stale); renderCOTable(); return; }
+    } catch(e2) {}
+    if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3)">載入失敗：${e.message}</div>`;
+  }
+}
+
+async function refreshCheckout() {
+  try { localStorage.removeItem('dbc_co_'+coCurArea); localStorage.removeItem('dbc_co_'+coCurArea+'_ts'); } catch(e) {}
+  delete coRawRows[coCurArea];
+  renderCheckout(coCurArea);
+}
+
+function renderCOTable() {
+  const body = document.getElementById('co-body');
+  if (!body) return;
+  const rows = coRawRows[coCurArea];
+  if (!rows) return;
+
+  /* 分組：退房日期 → 旅客列（不按旅館分組）*/
+  const allDates = [];
+  const groups   = {};   // {date: {wday, rows:[]}}
+  let curDate    = '';
+
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.every(c => !c)) continue;
+    if (coIsSep(row)) {
+      const isNew = !String(row[0]).trim();
+      curDate = isNew ? String(row[1] || '') : String(row[0] || '');
+      const wday = isNew ? String(row[2] || '') : String(row[1] || '');
+      if (!allDates.includes(curDate)) allDates.push(curDate);
+      if (!groups[curDate]) groups[curDate] = { wday, rows: [] };
+      continue;
+    }
+    if (!curDate) continue;
+    if (coCurDate && curDate !== coCurDate) continue;
+    if (!String(row[3] || '').trim()) continue;   // 訂編空白跳過
+    groups[curDate].rows.push(row);
+  }
+
+  /* 更新日期選單 */
+  const sel = document.getElementById('co-date-sel');
+  if (sel) {
+    sel.innerHTML = '<option value="">全部日期</option>' +
+      allDates.map(d => `<option value="${d}"${d===coCurDate?' selected':''}>${d}</option>`).join('');
+  }
+
+  const gridCols = CO_COLS.map(ci => CO_META[ci][1] + 'px').join(' ');
+  let html = `<div class="c-hdr-row" style="grid-template-columns:${gridCols}">`;
+  CO_COLS.forEach(ci => {
+    const [name,,align] = CO_META[ci];
+    html += `<div class="c-hdr" style="justify-content:${align==='left'?'flex-start':'center'}">${name}</div>`;
+  });
+  html += '</div>';
+
+  const datesToShow = coCurDate ? [coCurDate] : allDates;
+  let total = 0;
+
+  for (const date of datesToShow) {
+    const grp = groups[date]; if (!grp) continue;
+    const cnt = grp.rows.length;
+    if (!cnt) continue;
+
+    /* 分隔列：退房日期 ＋ 票數摘要 */
+    html += `<div class="c-sep">
+      ${date}（${grp.wday}）退房
+      <span style="margin-left:10px;font-size:13px;color:#60b3f4;font-weight:700">${cnt}人</span>
+      <span style="margin-left:12px;font-weight:400;font-size:11.5px;color:var(--tx2)">
+        下山巴士 ${cnt}張&ensp;／&ensp;新幹線 ${cnt}張
+      </span>
+    </div>`;
+
+    /* 旅客列 */
+    for (const row of grp.rows) {
+      const orderNo = String(row[3] || '');   // 訂編 (col 3)
+      const name    = String(row[4] || '');   // 中文姓名 (col 4)
+      html += `<div class="c-label"><span class="c-order">${orderNo}</span><span class="c-name">${name}</span></div>`;
+      html += `<div class="c-data-row" style="grid-template-columns:${gridCols}">`;
+      CO_COLS.forEach(ci => {
+        const val = String(row[ci] ?? '');
+        const [,,align] = CO_META[ci];
+        const hasCiNote = ci === 8 && val;   // 入住備註有值時底色提示
+        let cls = 'c-cell' + (align==='left' ? ' c-left' : '');
+        let style = hasCiNote ? ' style="color:#f0c060"' : '';
+        html += `<div class="${cls}"${style}>${val}</div>`;
+      });
+      html += '</div>';
+      total++;
+    }
+  }
+
   if (!total) html += `<div class="c-label" style="padding:32px;color:var(--tx3);text-align:center">此期間無資料</div>`;
   body.innerHTML = html;
 }
