@@ -252,6 +252,14 @@ body {
   background: var(--bg2); border: 1px solid var(--bd);
   border-radius: 4px; padding: 3px 8px;
 }
+.topbar-home {
+  display: none; align-items: center; gap: 5px;
+  background: none; border: 1px solid var(--bd); border-radius: 6px;
+  color: var(--tx2); cursor: pointer; padding: 4px 10px;
+  font-size: 12px; font-family: inherit; flex-shrink: 0;
+  transition: all .15s;
+}
+.topbar-home:hover { color: var(--tx); border-color: var(--bd2); background: var(--bg2); }
 
 .page { flex: 1; padding: 28px 24px; }
 .page-header { margin-bottom: 24px; }
@@ -561,6 +569,12 @@ body {
         </svg>
       </button>
       <div class="topbar-title" id="page-title">首頁</div>
+      <button class="topbar-home" id="btn-home" onclick="showHome()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        首頁
+      </button>
       <div class="topbar-tag" id="user-tag"></div>
     </div>
     <div class="page" id="page-content">
@@ -690,8 +704,7 @@ function buildNav(pages) {
     html += `<div class="nav-section-label">${sec}</div>`;
     ps.forEach(p => {
       const def = PAGES[p] || {};
-      const id  = 'n-' + p.replace(/[^a-z0-9]/gi, '-');
-      html += `<div class="nav-item" id="${id}" onclick="go('${p}')">${svgIcon(def.icon||'')} ${p}</div>`;
+      html += `<div class="nav-item" data-page="${p}" onclick="go('${p}')">${svgIcon(def.icon||'')} ${p}</div>`;
     });
   });
   menu.innerHTML = html;
@@ -699,9 +712,12 @@ function buildNav(pages) {
 
 function go(page) {
   document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-  const el = document.getElementById('n-' + page.replace(/[^a-z0-9]/gi, '-'));
-  if (el) el.classList.add('active');
+  document.querySelectorAll('.nav-item[data-page]').forEach(e => {
+    if (e.dataset.page === page) e.classList.add('active');
+  });
   document.getElementById('page-title').textContent = page;
+  const btnHome = document.getElementById('btn-home');
+  if (btnHome) btnHome.style.display = 'flex';
   closeSidebar();
 
   if (page === '課程安排')    { renderCourse(); return; }
@@ -732,6 +748,8 @@ function showHome() {
   document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
   document.getElementById('nav-home')?.classList.add('active');
   document.getElementById('page-title').textContent = '首頁';
+  const btnHome = document.getElementById('btn-home');
+  if (btnHome) btnHome.style.display = 'none';
   closeSidebar();
   const pc = document.getElementById('page-content');
   pc.className = 'page';
@@ -1519,18 +1537,17 @@ function renderCITable() {
    CHECKOUT PAGE（送客單）
 ════════════════════════════════ */
 /* CHECKOUT_COLS index：
-   0=項目, 1=退房日期, 2=泊數, 3=訂編(label), 4=中文姓名(label),
+   0=項目, 1=退房日期(分隔列顯示), 2=泊數, 3=訂編(label), 4=中文姓名(label),
    5=性別, 6=年齡, 7=出發日期, 8=入住備註, 9=退房備註, 10=旅客編號 */
 const CO_META = {
-  1: ['退房日期', 66,'center'],
   2: ['泊數',    38,'center'],
   5: ['性別',    38,'center'],
   6: ['年齡',    38,'center'],
-  7: ['出發日期', 66,'center'],
+  7: ['出發日期', 66,'center'],   // 保留：可看出續滑旅客
   8: ['入住備註', 140,'left'],
   9: ['備註',   100,'left'],
 };
-const CO_COLS = [1, 2, 5, 6, 7, 8, 9];
+const CO_COLS = [2, 5, 6, 7, 8, 9];  // 退房日期已在分隔列顯示，grid 不重複
 const CO_CACHE_TTL  = 15 * 60 * 1000;
 const CO_AREA_NAME  = { nozawa:'野澤', madarao:'斑尾', yongpyong:'龍平' };
 
