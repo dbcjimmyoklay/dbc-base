@@ -3049,7 +3049,7 @@ function saRenderDashboard() {
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
             <span style="font-size:11px;color:var(--tx3)">各區回頭客數量</span>
             ${D.returning.customers && D.returning.customers.length ? `
-              <button onclick="saShowReturningDetail()" style="margin-left:auto;background:rgba(240,160,96,.15);border:1px solid #f0a060;color:#f0a060;border-radius:6px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit">📋 跨年明細 (${D.returning.customers.length} 位)</button>
+              <button onclick="saShowReturningDetail()" style="margin-left:auto;background:rgba(240,160,96,.15);border:1px solid #f0a060;color:#f0a060;border-radius:6px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit">📋 明細 (${D.returning.customers.length} 位)</button>
             ` : ''}
           </div>
           ${SA_AREAS.map(a => {
@@ -3411,7 +3411,7 @@ function saShowReturningDetail() {
     <div style="background:var(--bg1);border:1px solid var(--bd2);border-radius:12px;max-width:680px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5)">
       <div style="padding:14px 18px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
         <div>
-          <div style="font-size:14px;font-weight:600;color:var(--tx)">跨年回頭客明細</div>
+          <div style="font-size:14px;font-weight:600;color:var(--tx)">回頭客明細</div>
           <div style="font-size:11px;color:var(--tx3);margin-top:2px">
             <span id="sa-rt-mc">${customers.length}</span> 位 ｜ 累計報名 ≥ 2 次
           </div>

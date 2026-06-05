@@ -383,7 +383,12 @@ def compute_returning(current_df, historical_dfs, historical_seasons, current_se
 
     def process_df(df, season):
         df = df.copy()
-        df['_area'] = df['團號'].apply(get_area)
+        # 23/24 雪季當年僅有野澤一個雪場 → 強制全部歸野澤
+        # 團號規則從 24/25 開始啟用
+        if season == '23/24':
+            df['_area'] = '野澤'
+        else:
+            df['_area'] = df['團號'].apply(get_area)
         df['_fee']  = pd.to_numeric(
             df['團費'].astype(str).str.replace(',', '').str.replace(' ', ''),
             errors='coerce',
