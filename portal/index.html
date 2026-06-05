@@ -473,6 +473,42 @@ body {
   background:var(--bg3); padding:1px 7px; border-radius:8px;
 }
 
+/* ── 教練班表 ── */
+.cs-page { display:flex; flex-direction:column; height:calc(100dvh - var(--top-h)); overflow:hidden; padding:0; }
+.cs-toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--bd); flex-shrink:0; font-size:11.5px; color:var(--tx3); }
+.cs-toolbar .c-refresh { margin-left:auto; }
+.cs-body { flex:1; overflow:auto; }
+
+/* 左側凍結欄寬 */
+.cs-grid { display:grid; width:max-content; min-width:100%; font-size:11px; }
+.cs-name { position:-webkit-sticky; position:sticky; left:0; z-index:4; background:var(--bg1); padding:4px 8px; white-space:nowrap; overflow:hidden; display:flex; align-items:center; border-right:2px solid var(--bd2); border-bottom:1px solid var(--bd); }
+.cs-off  { position:-webkit-sticky; position:sticky; left:80px; z-index:4; background:var(--bg1); padding:4px 4px; text-align:center; color:var(--tx3); font-size:10.5px; border-right:1px solid var(--bd); border-bottom:1px solid var(--bd); }
+
+/* 表頭 sticky top */
+.cs-hdr-top { position:-webkit-sticky; position:sticky; top:0; z-index:6; background:#000; }
+.cs-hdr-cell { padding:3px 4px; text-align:center; font-size:10.5px; color:var(--tx2); white-space:nowrap; border-bottom:1px solid var(--bd); border-right:1px solid #0a2545; }
+.cs-hdr-cell.cs-name { z-index:7; background:#000; color:var(--tx); font-weight:600; }
+.cs-hdr-cell.cs-off  { z-index:7; background:#000; color:var(--tx2); }
+.cs-hdr-date  { color:var(--tx); font-weight:600; }
+.cs-hdr-wday  { color:var(--tx2); }
+.cs-hdr-wday.we { color:#f0c060; }   /* 週末黃色 */
+.cs-hdr-memo  { color:#e8a440; font-size:10px; max-width:46px; overflow:hidden; text-overflow:ellipsis; }
+
+/* 地區分隔列 */
+.cs-area { position:-webkit-sticky; position:sticky; left:0; z-index:5; grid-column:1 / -1; background:#0f3060; color:#a8d8ff; font-weight:700; font-size:12.5px; padding:6px 12px; border-top:3px solid #2a7fc0; border-bottom:2px solid #1a5a8a; letter-spacing:.3px; }
+
+/* 排班格 */
+.cs-cell { padding:3px 4px; text-align:center; white-space:nowrap; overflow:hidden; border-bottom:1px solid var(--bd); border-right:1px solid #0a2545; background:var(--bg0); color:var(--tx); }
+.cs-cell.we { background:#001a35; }
+.cs-cell.empty { color:var(--tx3); }
+.cs-tag-no  { color:#bbb; }              /* 野澤底色預設 */
+.cs-tag-bl  { color:#7ec8f5; }           /* 斑尾藍 */
+.cs-tag-or  { color:#f0a060; }           /* 湯澤橘 */
+.cs-tag-rd  { color:#f08080; }           /* 京都紅 */
+.cs-tag-off { color:var(--tx3); font-style:italic; }   /* 休/事務/病 */
+.cs-tag-tr  { color:#6dddaa; }           /* 訓練/研修/講習 */
+.cs-tag-kol { color:#e8a440; font-weight:600; }
+
 /* ── 入住單：房型 Sub-header ── */
 .ci-room {
   position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%;
@@ -727,6 +763,7 @@ function go(page) {
   if (page === '送客單－野澤') { renderCheckout('nozawa');    return; }
   if (page === '送客單－斑尾') { renderCheckout('madarao');   return; }
   if (page === '送客單－龍平') { renderCheckout('yongpyong'); return; }
+  if (page === '教練班表')    { renderCoach();              return; }
 
   const pc = document.getElementById('page-content');
   pc.className = 'page';
@@ -1750,6 +1787,190 @@ function renderCOTable() {
   }
 
   if (!total) html += `<div class="c-label" style="padding:32px;color:var(--tx3);text-align:center">此期間無資料</div>`;
+  body.innerHTML = html;
+}
+
+/* ════════════════════════════════
+   COACH SCHEDULE PAGE（教練班表）
+════════════════════════════════ */
+const CS_CACHE_KEY = 'dbc_coach_v1';
+const CS_CACHE_TTL = 15 * 60 * 1000;
+const CS_COL_NAME  = 80;   // 教練名欄寬
+const CS_COL_OFF   = 38;   // 休假數欄寬
+const CS_COL_DAY   = 46;   // 每日欄寬
+
+let csRawRows = null;
+
+function renderCoach() {
+  const pc = document.getElementById('page-content');
+  pc.className = 'cs-page';
+  pc.innerHTML = `
+    <div class="cs-toolbar">
+      <span>← 左右滑動瀏覽全季 ｜ 教練名稱凍結</span>
+      <button class="c-view c-refresh" onclick="refreshCoach()" title="重新載入">↺</button>
+    </div>
+    <div class="cs-body" id="cs-body">
+      <div class="loading"><div class="spin"></div> 載入中</div>
+    </div>`;
+  if (csRawRows) renderCSGrid();
+  else loadCoach();
+}
+
+async function loadCoach() {
+  try {
+    const cached = localStorage.getItem(CS_CACHE_KEY);
+    const ts = parseInt(localStorage.getItem(CS_CACHE_KEY + '_ts') || '0');
+    if (cached && Date.now() - ts < CS_CACHE_TTL) {
+      csRawRows = JSON.parse(cached);
+      renderCSGrid();
+      return;
+    }
+  } catch(e) {}
+  try {
+    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCoach`, {redirect:'follow'});
+    const data = await res.json();
+    if (data.status !== 'ok') {
+      if (data.message?.includes('Token') || data.message?.includes('未授權')) {
+        const body = document.getElementById('cs-body');
+        if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3);line-height:2.4">登入已過期<br>
+          <button onclick="signOut()" style="margin-top:8px;padding:8px 22px;background:var(--ac);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-family:inherit">重新登入</button></div>`;
+        return;
+      }
+      throw new Error(data.message || '伺服器錯誤');
+    }
+    csRawRows = data.rows || [];
+    try {
+      localStorage.setItem(CS_CACHE_KEY, JSON.stringify(csRawRows));
+      localStorage.setItem(CS_CACHE_KEY + '_ts', String(Date.now()));
+    } catch(e) {}
+    renderCSGrid();
+  } catch(e) {
+    try {
+      const stale = localStorage.getItem(CS_CACHE_KEY);
+      if (stale) { csRawRows = JSON.parse(stale); renderCSGrid(); return; }
+    } catch(e2) {}
+    const body = document.getElementById('cs-body');
+    if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3)">載入失敗：${e.message}</div>`;
+  }
+}
+
+async function refreshCoach() {
+  csRawRows = null;
+  try { localStorage.removeItem(CS_CACHE_KEY); localStorage.removeItem(CS_CACHE_KEY + '_ts'); } catch(e) {}
+  const body = document.getElementById('cs-body');
+  if (body) body.innerHTML = '<div class="loading"><div class="spin"></div> 載入中</div>';
+  await loadCoach();
+}
+
+/* 判斷地區分隔列：col0 是 '野澤'/'斑尾'/'班尾'/'湯澤'/'京都'，其他欄空 */
+function csIsArea(row) {
+  if (!Array.isArray(row) || !row.length) return false;
+  const v0 = String(row[0] || '').trim();
+  if (!['野澤','斑尾','班尾','湯澤','京都'].includes(v0)) return false;
+  for (let i = 1; i < row.length; i++) if (String(row[i] || '').trim()) return false;
+  return true;
+}
+
+/* 排班內容分類 → CSS class */
+function csCellClass(v) {
+  v = String(v || '').trim();
+  if (!v) return 'cs-cell empty';
+  if (v === '休' || v === '事務' || v === '病' || v === '定休' || v === '事假') return 'cs-cell cs-tag-off';
+  if (v.includes('訓練') || v.includes('研修') || v.includes('講習')) return 'cs-cell cs-tag-tr';
+  if (v.startsWith('野') || v.startsWith('Maggie野') || v.startsWith('琦雅野') || v.includes('野專屬')) return 'cs-cell cs-tag-no';
+  if (v.startsWith('斑') || v.startsWith('班') || v.includes('斑專屬')) return 'cs-cell cs-tag-bl';
+  if (v.startsWith('湯')) return 'cs-cell cs-tag-or';
+  if (v.startsWith('京')) return 'cs-cell cs-tag-rd';
+  if (v.includes('KOL')) return 'cs-cell cs-tag-kol';
+  return 'cs-cell';
+}
+
+/* 偵測有效日期欄範圍：日期列(index 1) 非空者算入 */
+function csActiveCols(rows) {
+  if (!rows || rows.length < 2) return 0;
+  const dateRow = rows[1] || [];
+  let last = 2;
+  for (let i = 2; i < dateRow.length; i++) {
+    if (String(dateRow[i] || '').trim()) last = i;
+  }
+  return last + 1;   // exclusive end
+}
+
+function renderCSGrid() {
+  const body = document.getElementById('cs-body');
+  if (!body || !csRawRows) return;
+  const rows = csRawRows;
+  if (rows.length < 3) {
+    body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3)">尚無班表資料</div>`;
+    return;
+  }
+
+  const endCol = csActiveCols(rows);
+  const nDays  = endCol - 2;
+  if (nDays <= 0) {
+    body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3)">尚無日期資料</div>`;
+    return;
+  }
+
+  /* grid-template-columns: [name] [off] [day1...dayN] */
+  const gridCols = `${CS_COL_NAME}px ${CS_COL_OFF}px repeat(${nDays}, ${CS_COL_DAY}px)`;
+
+  const wdayRow = rows[0] || [];
+  const dateRow = rows[1] || [];
+  const memoRow = rows[2] || [];
+
+  let html = `<div class="cs-grid" style="grid-template-columns:${gridCols}">`;
+
+  /* ── 表頭：日期/曜日/備註 ── */
+  // Date row (top sticky)
+  html += `<div class="cs-hdr-cell cs-name cs-hdr-top" style="background:#000">教練</div>`;
+  html += `<div class="cs-hdr-cell cs-off cs-hdr-top" style="background:#000">休</div>`;
+  for (let c = 2; c < endCol; c++) {
+    const wd = String(wdayRow[c] || '').trim();
+    const dt = String(dateRow[c] || '').trim();
+    const isWE = (wd === '六' || wd === '日');
+    html += `<div class="cs-hdr-cell cs-hdr-top">
+      <div class="cs-hdr-date">${dt}</div>
+      <div class="cs-hdr-wday${isWE?' we':''}">${wd}</div>
+    </div>`;
+  }
+  // Memo row
+  html += `<div class="cs-hdr-cell cs-name" style="top:38px;font-size:9.5px;color:var(--tx3)">備註</div>`;
+  html += `<div class="cs-hdr-cell cs-off" style="top:38px"></div>`;
+  for (let c = 2; c < endCol; c++) {
+    const m = String(memoRow[c] || '').trim();
+    html += `<div class="cs-hdr-cell cs-hdr-memo" title="${m}">${m}</div>`;
+  }
+
+  /* ── 資料列（從 row 3 起） ── */
+  for (let r = 3; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row) continue;
+
+    // 地區分隔列
+    if (csIsArea(row)) {
+      const area = String(row[0]).trim();
+      html += `<div class="cs-area">▎ ${area}</div>`;
+      continue;
+    }
+
+    const name = String(row[0] || '').trim();
+    const off  = String(row[1] || '').trim();
+    if (!name) continue;
+
+    html += `<div class="cs-name">${name}</div>`;
+    html += `<div class="cs-off">${off}</div>`;
+
+    for (let c = 2; c < endCol; c++) {
+      const v   = String(row[c] || '').trim();
+      const wd  = String(wdayRow[c] || '').trim();
+      const we  = (wd === '六' || wd === '日') ? ' we' : '';
+      const cls = csCellClass(v);
+      html += `<div class="${cls}${we}" title="${v}">${v}</div>`;
+    }
+  }
+
+  html += '</div>';
   body.innerHTML = html;
 }
 </script>
