@@ -119,27 +119,16 @@ def is_pure(g):
 
 
 def forward_fill_group_by_order(df):
-    """科威格式：同訂單第 2 人開始團號是空白 → 用訂單編號補齊
-    回傳新的 DataFrame，'團號' 欄為 forward-filled 版本
+    """科威格式：團號只在「該團首列」出現，同團後續列團號空白
+    （包含同訂單其他人 + 同團不同訂單的旅客）
+    用「行順序 forward-fill」沿用上一列團號，直到遇到新團號。
     """
-    if '訂單編號' not in df.columns or '團號' not in df.columns:
+    if '團號' not in df.columns:
         return df
     df = df.copy()
-    # 建立 訂單編號 → 第一個非空團號 的對照
-    order_to_group = {}
-    for _, row in df.iterrows():
-        order = str(row.get('訂單編號', '') or '').strip()
-        group = row.get('團號', None)
-        if order and order != 'nan' and order not in order_to_group:
-            if pd.notna(group) and str(group).strip():
-                order_to_group[order] = group
-    # 補齊
-    def fill(row):
-        if pd.notna(row['團號']) and str(row['團號']).strip():
-            return row['團號']
-        order = str(row.get('訂單編號', '') or '').strip()
-        return order_to_group.get(order, row['團號'])
-    df['團號'] = df.apply(fill, axis=1)
+    # 將空字串視為缺值
+    df['團號'] = df['團號'].replace(r'^\s*$', pd.NA, regex=True)
+    df['團號'] = df['團號'].ffill()
     return df
 
 
