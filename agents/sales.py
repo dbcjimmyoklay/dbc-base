@@ -364,8 +364,8 @@ def compute_returning(current_df, historical_dfs):
 # YoY 比較
 # ═══════════════════════════════════════════
 
-def _to_season_day(d, season_start_month=8):
-    """日期 → 該雪季的第幾天（8/1 = day 1）"""
+def _to_season_day(d, season_start_month=5):
+    """日期 → 該雪季的第幾天（5/1 = day 1）"""
     if pd.isna(d): return None
     if d.month >= season_start_month:
         season_start = pd.Timestamp(d.year, season_start_month, 1)
@@ -478,10 +478,10 @@ def run():
     print("計算 YoY 對比...")
     yoy = compute_yoy(current_df, historical_dfs, historical_seasons)
 
-    # ── 自動推算當季標籤 ──
+    # ── 自動推算當季標籤（雪季 5/1 起算，5月後 = 新季）──
     today    = datetime.now()
     cur_year = today.year - 2000
-    if today.month >= 8:
+    if today.month >= 5:
         current_season = f"{cur_year}/{cur_year+1}"
     else:
         current_season = f"{cur_year-1}/{cur_year}"

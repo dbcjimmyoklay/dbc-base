@@ -519,6 +519,38 @@ body {
 .sa-cw { position:relative; }
 .sa-cw canvas { max-height:260px; }
 
+/* 數字為主的日期列表 */
+.sa-day-mini { height:50px; margin-bottom:10px; }
+.sa-day-list { max-height:380px; overflow-y:auto; border-top:1px solid var(--bd); }
+.sa-day-list::-webkit-scrollbar { width:6px; }
+.sa-day-list::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:3px; }
+.sa-day-hdr { display:grid; grid-template-columns: 70px 1fr 50px 70px; gap:8px; padding:6px 8px; font-size:10px; color:var(--tx3); border-bottom:1px solid var(--bd); background:var(--bg0); position:sticky; top:0; z-index:2; text-transform:uppercase; letter-spacing:.5px; }
+.sa-day-row { display:grid; grid-template-columns: 70px 1fr 50px 70px; gap:8px; padding:6px 8px; border-bottom:1px solid var(--bd); align-items:center; font-size:11.5px; }
+.sa-day-row:hover { background:var(--bg2); }
+.sa-day-row.we { background:rgba(240,192,96,.04); }
+.sa-day-row.we:hover { background:rgba(240,192,96,.10); }
+.sa-day-row.empty { opacity:.35; }
+.sa-day-date { font-family:monospace; color:var(--tx2); white-space:nowrap; }
+.sa-day-date b { color:var(--tx); font-weight:600; }
+.sa-day-date.we b { color:#f0c060; }
+.sa-day-areas { display:flex; gap:8px; font-family:monospace; font-size:10.5px; color:var(--tx3); flex-wrap:nowrap; overflow:hidden; }
+.sa-day-areas span { white-space:nowrap; }
+.sa-day-areas span.has { font-weight:600; }
+.sa-day-areas span.no { opacity:.3; }
+.sa-day-total { font-weight:700; font-family:monospace; font-size:14px; color:#60b3f4; text-align:right; }
+.sa-day-bar { height:5px; background:var(--bg2); border-radius:3px; overflow:hidden; }
+.sa-day-bar-i { height:100%; background:linear-gradient(90deg, #1a6fb5, #60b3f4); border-radius:3px; }
+.sa-day-bar.empty .sa-day-bar-i { background:var(--bg3); }
+
+/* 範圍切換按鈕 */
+.sa-range-info { font-size:10.5px; color:var(--tx3); font-family:monospace; margin-left:auto; }
+
+@media (max-width:520px) {
+  .sa-day-hdr, .sa-day-row { grid-template-columns: 60px 1fr 40px 50px; gap:5px; padding:5px; }
+  .sa-day-areas { font-size:10px; gap:5px; }
+  .sa-day-total { font-size:12.5px; }
+}
+
 /* 雙欄 */
 .sa-g2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .sa-g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
@@ -2919,21 +2951,32 @@ function saRenderDashboard() {
       <div class="sa-card-ti">
         <span class="sa-dot" style="background:#f59e0b"></span>每日新增（觀察 KOL/廣告效益）
         <div class="sa-tabs" id="sa-daily-tabs">
-          <button class="sa-tab active" onclick="saSetDaily('all','all',this)">全部</button>
-          <button class="sa-tab" onclick="saSetDaily('all','野澤',this)">野澤</button>
-          <button class="sa-tab" onclick="saSetDaily('all','斑尾',this)">斑尾</button>
-          <button class="sa-tab" onclick="saSetDaily('all','湯澤',this)">湯澤</button>
-          <button class="sa-tab" onclick="saSetDaily('all','龍平',this)">龍平</button>
-          <button class="sa-tab" onclick="saSetDaily('3m','all',this)">近3月</button>
+          <button class="sa-tab active" onclick="saSetDailyRange('all',this)">全期</button>
+          <button class="sa-tab" onclick="saSetDailyRange('30',this)">近30日</button>
+          <button class="sa-tab" onclick="saSetDailyRange('14',this)">近14日</button>
         </div>
       </div>
-      <div class="sa-cw" style="height:180px"><canvas id="sa-dailyC"></canvas></div>
+      <div class="sa-day-mini"><canvas id="sa-dailyMiniC"></canvas></div>
+      <div class="sa-day-hdr">
+        <span>日期</span><span>各區</span><span style="text-align:right">合計</span><span></span>
+      </div>
+      <div class="sa-day-list" id="sa-daily-list"></div>
     </div>
 
     <div class="sa-sec">出發人次分布</div>
     <div class="sa-card">
-      <div class="sa-card-ti"><span class="sa-dot" style="background:#06b6d4"></span>各日期出發人次（看淡旺季）</div>
-      <div class="sa-cw" style="height:220px"><canvas id="sa-depC"></canvas></div>
+      <div class="sa-card-ti">
+        <span class="sa-dot" style="background:#06b6d4"></span>各日期出發人次（看淡旺季）
+        <div class="sa-tabs" id="sa-dep-tabs">
+          <button class="sa-tab active" onclick="saSetDepRange('all',this)">全期</button>
+          <button class="sa-tab" onclick="saSetDepRange('peak',this)">旺季 12-2月</button>
+        </div>
+      </div>
+      <div class="sa-day-mini"><canvas id="sa-depMiniC"></canvas></div>
+      <div class="sa-day-hdr">
+        <span>出發日</span><span>各區</span><span style="text-align:right">合計</span><span></span>
+      </div>
+      <div class="sa-day-list" id="sa-dep-list"></div>
     </div>
 
     ${D.yoy ? `
@@ -3018,8 +3061,8 @@ function saRenderDashboard() {
   saDestroyChart('areaLv');
 
   saSetCum('all', document.querySelector('.sa-card .sa-tabs .sa-tab.active'));
-  saSetDaily('all', 'all', document.querySelectorAll('#sa-daily-tabs .sa-tab')[0]);
-  saRenderDeparture();
+  saSetDailyRange('all', null);
+  saSetDepRange('all', null);
   if (D.yoy) { saRenderYoyCum(); saRenderYoyMd(); }
   saRenderDemoKpi();
   saRenderLevel();
@@ -3057,69 +3100,92 @@ function saSetCum(range, btn) {
   });
 }
 
-/* ── 每日新增 ── */
-function saSetDaily(range, area, btn) {
+/* ── 每日新增（數字為主，迷你柱狀為輔，最新在上） ── */
+const SA_WDAY = ['日','一','二','三','四','五','六'];
+
+function saSetDailyRange(range, btn) {
   if (btn) {
     document.querySelectorAll('#sa-daily-tabs .sa-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   }
   let pts = saData.daily_signup;
-  if (range === '3m') {
+  if (range === '30' || range === '14') {
+    const n = parseInt(range);
     const last = new Date(pts[pts.length-1].d);
-    const cut  = new Date(last); cut.setDate(cut.getDate() - 90);
+    const cut  = new Date(last); cut.setDate(cut.getDate() - n);
     pts = pts.filter(p => new Date(p.d) >= cut);
   }
-  saDestroyChart('daily');
-  const labels = pts.map(p => p.d.slice(5));
-  let datasets;
-  if (area === 'all') {
-    datasets = SA_AREAS.map(a => ({
-      label: a, data: pts.map(p => p[a]||0),
-      backgroundColor: saCo(SA_AC[a], .85), borderRadius:1, borderSkipped:false,
-    }));
-  } else {
-    datasets = [{
-      label: area, data: pts.map(p => p[area]||0),
-      backgroundColor: saCo(SA_AC[area], .85), borderRadius:2, borderSkipped:false,
-    }];
+  saRenderDayMini('sa-dailyMiniC', 'daily', pts, '#f59e0b');
+  saRenderDayList('sa-daily-list', pts, /*reverse*/ true);
+}
+
+/* ── 出發人次 ── */
+function saSetDepRange(range, btn) {
+  if (btn) {
+    document.querySelectorAll('#sa-dep-tabs .sa-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
   }
-  const stacked = area === 'all';
-  saCharts.daily = new Chart(document.getElementById('sa-dailyC'), {
+  let pts = saData.departure;
+  if (range === 'peak') {
+    pts = pts.filter(p => {
+      const m = parseInt(p.d.split('-')[1]);
+      return m === 12 || m === 1 || m === 2;
+    });
+  }
+  saRenderDayMini('sa-depMiniC', 'dep', pts, '#06b6d4');
+  saRenderDayList('sa-dep-list', pts, /*reverse*/ false);
+}
+
+/* 迷你柱狀 - 只顯示合計 */
+function saRenderDayMini(canvasId, chartKey, pts, color) {
+  saDestroyChart(chartKey);
+  saCharts[chartKey] = new Chart(document.getElementById(canvasId), {
     type:'bar',
-    data:{ labels, datasets },
+    data:{
+      labels: pts.map(p => p.d.slice(5)),
+      datasets:[{ data: pts.map(p => p.total), backgroundColor: saCo(color, .8), borderRadius:1, borderSkipped:false }]
+    },
     options:{
-      ...saChartOpts(),
-      plugins:{ ...saChartOpts().plugins, legend:{ display: stacked, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:10,padding:8} } },
-      scales:{
-        x:{ ...saChartOpts().scales.x, stacked, ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:18 } },
-        y:{ ...saChartOpts().scales.y, stacked },
-      }
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#001f3d', borderColor:'#0d3d75', borderWidth:1, titleColor:'#fff', bodyColor:'#8aadcc', padding:8, cornerRadius:6, displayColors:false} },
+      scales:{ x:{ display:false }, y:{ display:false } }
     }
   });
 }
 
-/* ── 出發人次 ── */
-function saRenderDeparture() {
-  const pts = saData.departure;
-  saDestroyChart('dep');
-  saCharts.dep = new Chart(document.getElementById('sa-depC'), {
-    type:'bar',
-    data:{
-      labels: pts.map(p => p.d.slice(5)),
-      datasets: SA_AREAS.map(a => ({
-        label:a, data: pts.map(p => p[a]||0),
-        backgroundColor: saCo(SA_AC[a], .85), borderRadius:1, borderSkipped:false,
-      })),
-    },
-    options:{
-      ...saChartOpts(),
-      plugins:{ ...saChartOpts().plugins, legend:{ display:true, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:10,padding:8} } },
-      scales:{
-        x:{ ...saChartOpts().scales.x, stacked:true, ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:20 } },
-        y:{ ...saChartOpts().scales.y, stacked:true },
-      }
-    }
-  });
+/* 列表渲染：日期 + 各區 + 合計 + 比例 bar */
+function saRenderDayList(elId, pts, reverse) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!pts.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--tx3);font-size:11px">無資料</div>'; return; }
+
+  const ordered = reverse ? [...pts].reverse() : pts;
+  const maxTotal = Math.max(...pts.map(p => p.total), 1);
+
+  let html = '';
+  for (const p of ordered) {
+    const dt = new Date(p.d);
+    const wd = SA_WDAY[dt.getDay()];
+    const isWE = (wd === '六' || wd === '日');
+    const mmdd = p.d.slice(5).replace('-', '/');
+
+    const areas = SA_AREAS.map(a => {
+      const v = p[a] || 0;
+      return v > 0 ? `<span class="has" style="color:${SA_AC[a]}">${a[0]}${v}</span>`
+                   : `<span class="no">${a[0]}—</span>`;
+    }).join('');
+
+    const barPct = p.total ? (p.total / maxTotal * 100) : 0;
+    const empty  = p.total === 0;
+
+    html += `<div class="sa-day-row${isWE?' we':''}${empty?' empty':''}">
+      <span class="sa-day-date${isWE?' we':''}"><b>${mmdd}</b> ${wd}</span>
+      <span class="sa-day-areas">${areas}</span>
+      <span class="sa-day-total">${p.total || '—'}</span>
+      <div class="sa-day-bar${empty?' empty':''}"><div class="sa-day-bar-i" style="width:${barPct}%"></div></div>
+    </div>`;
+  }
+  el.innerHTML = html;
 }
 
 /* ── YoY 同檔期 ── */
