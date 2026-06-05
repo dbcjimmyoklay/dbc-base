@@ -2990,7 +2990,7 @@ function saRenderDashboard() {
     <div class="sa-g2">
       <div class="sa-card" style="margin-bottom:0">
         <div class="sa-card-ti">
-          <span class="sa-dot" style="background:#8b5cf6"></span>同檔期累積（雪季前 N 天，5/1 起算）
+          <span class="sa-dot" style="background:#8b5cf6"></span>同檔期累積（從開賣日 5/1 起算）
         </div>
         <div class="sa-cw" style="height:220px"><canvas id="sa-yoyCumC"></canvas></div>
       </div>
@@ -3235,7 +3235,7 @@ function saRenderYoyCharts() {
     const diffColor = diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--tx3)';
     const dayN = saData.yoy.cur_max_day;
     sumEl.innerHTML = `
-      雪季第 <b style="color:var(--tx);font-family:monospace">${dayN}</b> 天（截至今日）：
+      開賣後第 <b style="color:var(--tx);font-family:monospace">${dayN}</b> 天（截至今日）：
       <b style="color:#10b981;font-family:monospace">本季 ${curN.toLocaleString()}</b> 人 ｜
       ${comp.season} 同期 <b style="color:#8b5cf6;font-family:monospace">${prevN.toLocaleString()}</b> 人 ｜
       差距 <b style="color:${diffColor};font-family:monospace">${diffStr} ${diffPct}</b>
@@ -3265,12 +3265,12 @@ function saRenderYoyCharts() {
         legend:{ display:true, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:14,padding:8} },
         tooltip:{
           ...saChartOpts().plugins.tooltip,
-          callbacks:{ title: (items) => `雪季第 ${items[0].label} 天` }
+          callbacks:{ title: (items) => `開賣後第 ${items[0].label} 天` }
         }
       },
       scales:{
         x:{ ...saChartOpts().scales.x,
-            title:{display:true, text:'雪季天數（5/1 起算）', color:'#4a7299', font:{size:10}},
+            title:{display:true, text:'開賣後天數（5/1 為 day 0）', color:'#4a7299', font:{size:10}},
             ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:10 } },
         y:{ ...saChartOpts().scales.y,
             title:{display:true, text:'累積報名人次', color:'#4a7299', font:{size:10}} },
@@ -3299,7 +3299,7 @@ function saRenderYoyCharts() {
       },
       scales:{
         x:{ ...saChartOpts().scales.x,
-            title:{display:true, text:'出發月/日（按雪季順序 5→4 月）', color:'#4a7299', font:{size:10}},
+            title:{display:true, text:'出發月/日（按季內順序 5→4 月）', color:'#4a7299', font:{size:10}},
             ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:24 } },
         y:{ ...saChartOpts().scales.y,
             title:{display:true, text:'出發人次', color:'#4a7299', font:{size:10}} },

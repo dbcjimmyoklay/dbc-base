@@ -393,7 +393,10 @@ def compute_returning(current_df, historical_dfs):
 # ═══════════════════════════════════════════
 
 def _to_season_day(d, season_start_month=5):
-    """日期 → 該雪季的第幾天（5/1 = day 1）"""
+    """報名日期 → 開賣後第幾天
+    開賣日 = 雪季年的 5/1（25/26 雪季開賣日 = 2025/5/1）
+    5/1 為 day 0
+    """
     if pd.isna(d): return None
     if d.month >= season_start_month:
         season_start = pd.Timestamp(d.year, season_start_month, 1)
