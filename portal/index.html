@@ -520,7 +520,7 @@ body {
 .sa-cw canvas { max-height:260px; }
 
 /* 數字為主的日期列表 */
-.sa-day-mini { height:50px; margin-bottom:10px; }
+.sa-day-mini { height:75px; margin-bottom:10px; }
 .sa-day-list { max-height:380px; overflow-y:auto; border-top:1px solid var(--bd); }
 .sa-day-list::-webkit-scrollbar { width:6px; }
 .sa-day-list::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:3px; }
@@ -2964,22 +2964,6 @@ function saRenderDashboard() {
       <div class="sa-day-list" id="sa-daily-list"></div>
     </div>
 
-    <div class="sa-sec">出發人次分布</div>
-    <div class="sa-card">
-      <div class="sa-card-ti">
-        <span class="sa-dot" style="background:#06b6d4"></span>各日期出發人次（看淡旺季）
-        <div class="sa-tabs" id="sa-dep-tabs">
-          <button class="sa-tab active" onclick="saSetDepRange('all',this)">全期</button>
-          <button class="sa-tab" onclick="saSetDepRange('peak',this)">旺季 12-2月</button>
-        </div>
-      </div>
-      <div class="sa-day-mini"><canvas id="sa-depMiniC"></canvas></div>
-      <div class="sa-day-hdr">
-        <span>出發日</span><span>各區</span><span style="text-align:right">合計</span><span></span>
-      </div>
-      <div class="sa-day-list" id="sa-dep-list"></div>
-    </div>
-
     ${D.yoy ? `
     <div class="sa-sec">同期對比</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -2999,6 +2983,18 @@ function saRenderDashboard() {
         <div class="sa-cw" style="height:220px"><canvas id="sa-yoyMdC"></canvas></div>
       </div>
     </div>` : ''}
+
+    <div class="sa-sec">出發人次分布</div>
+    <div class="sa-card">
+      <div class="sa-card-ti">
+        <span class="sa-dot" style="background:#06b6d4"></span>各日期出發人次（看淡旺季）
+      </div>
+      <div class="sa-day-mini" style="height:80px"><canvas id="sa-depMiniC"></canvas></div>
+      <div class="sa-day-hdr">
+        <span>出發日</span><span>各區</span><span style="text-align:right">合計</span><span></span>
+      </div>
+      <div class="sa-day-list" id="sa-dep-list"></div>
+    </div>
 
     <div class="sa-sec">客群分析</div>
     <div class="sa-mini-kpi" id="sa-demo-kpi"></div>
@@ -3128,40 +3124,49 @@ function saSetDailyRange(range, btn) {
     const cut  = new Date(last); cut.setDate(cut.getDate() - n);
     pts = pts.filter(p => new Date(p.d) >= cut);
   }
-  saRenderDayMini('sa-dailyMiniC', 'daily', pts, '#f59e0b');
+  saRenderDayMini('sa-dailyMiniC', 'daily', pts, '#f59e0b', /*showAxis*/ true);
   saRenderDayList('sa-daily-list', pts, /*reverse*/ true);
 }
 
 /* ── 出發人次 ── */
 function saSetDepRange(range, btn) {
-  if (btn) {
-    document.querySelectorAll('#sa-dep-tabs .sa-tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-  }
-  let pts = saData.departure;
-  if (range === 'peak') {
-    pts = pts.filter(p => {
-      const m = parseInt(p.d.split('-')[1]);
-      return m === 12 || m === 1 || m === 2;
-    });
-  }
-  saRenderDayMini('sa-depMiniC', 'dep', pts, '#06b6d4');
+  /* 保留為兼容性（已無 tab），永遠顯示全部 */
+  const pts = saData.departure;
+  saRenderDayMini('sa-depMiniC', 'dep', pts, '#06b6d4', /*showAxis*/ true);
   saRenderDayList('sa-dep-list', pts, /*reverse*/ false);
 }
 
-/* 迷你柱狀 - 只顯示合計 */
-function saRenderDayMini(canvasId, chartKey, pts, color) {
+/* 迷你柱狀 - 只顯示合計
+   showAxis=true 時顯示 X 軸日期 */
+function saRenderDayMini(canvasId, chartKey, pts, color, showAxis) {
   saDestroyChart(chartKey);
+  /* 智慧 maxTicks：依資料量決定刻度密度 */
+  const maxTicks = pts.length > 60 ? 10 : pts.length > 30 ? 14 : 18;
   saCharts[chartKey] = new Chart(document.getElementById(canvasId), {
     type:'bar',
     data:{
-      labels: pts.map(p => p.d.slice(5)),
+      labels: pts.map(p => p.d.slice(5)),   // MM-DD
       datasets:[{ data: pts.map(p => p.total), backgroundColor: saCo(color, .8), borderRadius:1, borderSkipped:false }]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#001f3d', borderColor:'#0d3d75', borderWidth:1, titleColor:'#fff', bodyColor:'#8aadcc', padding:8, cornerRadius:6, displayColors:false} },
-      scales:{ x:{ display:false }, y:{ display:false } }
+      plugins:{
+        legend:{display:false},
+        tooltip:{ backgroundColor:'#001f3d', borderColor:'#0d3d75', borderWidth:1, titleColor:'#fff', bodyColor:'#8aadcc', padding:8, cornerRadius:6, displayColors:false,
+          callbacks:{
+            title: items => items[0].label,
+            label: item => `${item.parsed.y} 人`
+          }
+        }
+      },
+      scales:{
+        x:{
+          display: !!showAxis,
+          grid:{ display:false },
+          ticks:{ color:'#4a7299', font:{size:9}, maxTicksLimit:maxTicks, autoSkip:true }
+        },
+        y:{ display:false }
+      }
     }
   });
 }
