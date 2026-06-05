@@ -165,15 +165,20 @@ def row_has_value(row, cols):
 # ═══════════════════════════════════════════
 
 def customer_keys(row):
-    """產生可能的旅客唯一 key：中文姓名+生日 / 護照號碼"""
+    """產生可能的旅客唯一 key（任一相同 = 同一人，個資留在 Python 端不上 JSON）
+    優先順位：身分證、護照、中文姓名+生日
+    """
     keys = []
+    id_no = str(row.get('身分證', '') or '').strip()
+    if id_no and id_no.lower() != 'nan' and len(id_no) >= 5:
+        keys.append(f"I:{id_no.upper()}")
+    passport = str(row.get('護照號碼', '') or '').strip()
+    if passport and passport.lower() != 'nan' and len(passport) >= 4:
+        keys.append(f"P:{passport.upper()}")
     name = str(row.get('中文姓名', '') or '').strip()
     bday = str(row.get('生日', '') or '').strip()
     if name and bday and bday.lower() != 'nan' and name.lower() != 'nan':
         keys.append(f"NB:{name}|{bday}")
-    passport = str(row.get('護照號碼', '') or '').strip()
-    if passport and passport.lower() != 'nan' and len(passport) >= 4:
-        keys.append(f"P:{passport.upper()}")
     return keys
 
 
@@ -334,14 +339,93 @@ def compute_addons(df):
 # 回頭客
 # ═══════════════════════════════════════════
 
-def compute_returning(current_df, historical_dfs):
+def compute_returning(current_df, historical_dfs, historical_seasons, current_season):
     """
-    歷年資料聚合：每位旅客在歷年出現過幾年（年度去重）
-    本季旅客若 key 命中歷年，視為回頭客
-    回傳含：count, by_area, times_dist, detail（所有回頭客當季每筆記錄）
+    跨年 person index（union-find）：身分證 / 護照 / 中文姓名+生日 任一相同 = 同一人
+    輸出：
+      stats: 本季回頭客率（與歷年比對）
+      customers: 報名次數 >= 2 的旅客明細（聚合各次報名，不含個資）
     """
-    historical_year_count = defaultdict(int)
+    # ── union-find person index ──
+    key_to_pid = {}
+    persons    = {}   # pid → {'name': str, 'signups': list}
+    pid_counter = [0]
 
+    def assign_person(keys):
+        if not keys:
+            return None
+        found_pids = set()
+        for k in keys:
+            if k in key_to_pid:
+                found_pids.add(key_to_pid[k])
+
+        if not found_pids:
+            pid_counter[0] += 1
+            pid = pid_counter[0]
+            persons[pid] = {'name': '', 'signups': []}
+        elif len(found_pids) == 1:
+            pid = next(iter(found_pids))
+        else:
+            # 多個 person 共有此 record 的 key → 合併
+            pid = min(found_pids)
+            for other in found_pids:
+                if other == pid: continue
+                persons[pid]['signups'].extend(persons[other]['signups'])
+                if not persons[pid]['name'] and persons[other]['name']:
+                    persons[pid]['name'] = persons[other]['name']
+                del persons[other]
+                for k_, v_ in list(key_to_pid.items()):
+                    if v_ == other:
+                        key_to_pid[k_] = pid
+        for k in keys:
+            key_to_pid[k] = pid
+        return pid
+
+    def process_df(df, season):
+        df = df.copy()
+        df['_area'] = df['團號'].apply(get_area)
+        df['_fee']  = pd.to_numeric(
+            df['團費'].astype(str).str.replace(',', '').str.replace(' ', ''),
+            errors='coerce',
+        )
+        for _, row in df.iterrows():
+            keys = customer_keys(row)
+            pid = assign_person(keys)
+            if pid is None:   # 無任何 key 的記錄無法配對，跳過
+                continue
+            name = str(row.get('中文姓名', '') or '').strip()
+            if name and not persons[pid]['name']:
+                persons[pid]['name'] = name
+            persons[pid]['signups'].append({
+                'season': season,
+                'area':   row.get('_area', '') or '未派團',
+                'date':   str(row.get('出發日期', '') or '').strip(),
+                'ski':    str(row.get('滑雪類別', '') or '').strip(),
+                'fee':    int(row['_fee']) if pd.notna(row['_fee']) else 0,
+            })
+
+    # 處理所有資料：歷年 + 本季
+    for season, df in zip(historical_seasons, historical_dfs):
+        process_df(df, season)
+    process_df(current_df, current_season)
+
+    # ── 篩選次數 >= 2 的旅客 ──
+    customers = []
+    for pid, p in persons.items():
+        if len(p['signups']) < 2:
+            continue
+        signups = sorted(p['signups'], key=lambda s: s['date'], reverse=True)
+        customers.append({
+            'name':          p['name'] or '?',
+            'total_signups': len(signups),
+            'total_fee':     sum(s['fee'] for s in signups),
+            'signups':       signups,
+        })
+    # 依次數降冪、團費降冪、姓名排序
+    customers.sort(key=lambda c: (-c['total_signups'], -c['total_fee'], c['name']))
+
+    # ── 本季回頭客率（與歷年比對，原邏輯）──
+    historical_year_count = defaultdict(int)
     for hist_df in historical_dfs:
         seen_this_year = set()
         for _, row in hist_df.iterrows():
@@ -350,34 +434,24 @@ def compute_returning(current_df, historical_dfs):
                     seen_this_year.add(k)
                     historical_year_count[k] += 1
 
-    current_df = current_df.copy()
-    current_df['_area'] = current_df['團號'].apply(get_area)
-    current_df['_fee']  = pd.to_numeric(
-        current_df['團費'].astype(str).str.replace(',', '').str.replace(' ', ''),
-        errors='coerce',
-    )
-
+    cur_copy = current_df.copy()
+    cur_copy['_area'] = cur_copy['團號'].apply(get_area)
     returning_count = 0
     by_area = defaultdict(int)
     times_dist = defaultdict(int)
     seen_visitors_this_season = set()
     seen_returning_visitors   = set()
-    detail = []
 
-    for _, row in current_df.iterrows():
+    for _, row in cur_copy.iterrows():
         keys = customer_keys(row)
         if not keys: continue
         primary_key = keys[0]
+        seen_visitors_this_season.add(primary_key)
 
         matched_years = 0
         for k in keys:
             matched_years = max(matched_years, historical_year_count.get(k, 0))
-
-        # 本季不重複旅客（同人多筆只算一次）
-        seen_visitors_this_season.add(primary_key)
-
         if matched_years > 0:
-            # 回頭客旅客計數（同人只算一次）
             if primary_key not in seen_returning_visitors:
                 seen_returning_visitors.add(primary_key)
                 returning_count += 1
@@ -387,27 +461,14 @@ def compute_returning(current_df, historical_dfs):
                 label = '4+' if total_visits >= 4 else str(total_visits)
                 times_dist[label] += 1
 
-            # 明細列表（每筆都列）
-            detail.append({
-                'name':   str(row.get('中文姓名', '') or '').strip(),
-                'area':   row.get('_area', '') or '未派團',
-                'ski':    str(row.get('滑雪類別', '') or '').strip(),
-                'fee':    int(row['_fee']) if pd.notna(row['_fee']) else 0,
-                'dep':    str(row.get('出發日期', '') or '').strip(),
-                'visits': matched_years + 1,   # 含本季是第幾次來
-            })
-
     total_unique = len(seen_visitors_this_season)
-    # 明細依次數降冪、再依團費降冪排序（最忠實 + 最貴的在前）
-    detail.sort(key=lambda r: (-r['visits'], -r['fee']))
-
     return {
-        'count': returning_count,
+        'count':        returning_count,
         'total_unique': total_unique,
-        'pct': round(returning_count / total_unique * 100, 1) if total_unique else 0,
-        'by_area': dict(by_area),
-        'times_dist': dict(times_dist),
-        'detail': detail,
+        'pct':          round(returning_count / total_unique * 100, 1) if total_unique else 0,
+        'by_area':      dict(by_area),
+        'times_dist':   dict(times_dist),
+        'customers':    customers,
     }
 
 
@@ -546,21 +607,21 @@ def run():
     area_level   = compute_area_level(current_df)
     addons       = compute_addons(current_df)
 
+    # 先推算當季標籤（後面 output 也會用）
+    today    = datetime.now()
+    cur_year = today.year - 2000
+    current_season = f"{cur_year}/{cur_year+1}" if today.month >= 5 else f"{cur_year-1}/{cur_year}"
+
     print("計算回頭客...")
-    returning = compute_returning(current_df, historical_dfs)
+    returning = compute_returning(current_df, historical_dfs, historical_seasons, current_season)
     print(f"  本季不重複旅客：{returning['total_unique']}")
-    print(f"  回頭客：{returning['count']} 人 ({returning['pct']}%)")
+    print(f"  本季回頭客：{returning['count']} 人 ({returning['pct']}%)")
+    print(f"  跨年總次數 >= 2 的旅客：{len(returning['customers'])} 位")
 
     print("計算 YoY 對比...")
     yoy = compute_yoy(current_df, historical_dfs, historical_seasons)
 
-    # ── 自動推算當季標籤（雪季 5/1 起算，5月後 = 新季）──
-    today    = datetime.now()
-    cur_year = today.year - 2000
-    if today.month >= 5:
-        current_season = f"{cur_year}/{cur_year+1}"
-    else:
-        current_season = f"{cur_year-1}/{cur_year}"
+    # current_season 已於 compute_returning 前推算
 
     output = {
         'updated':            datetime.now().strftime('%Y/%m/%d %H:%M'),

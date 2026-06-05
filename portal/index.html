@@ -574,6 +574,20 @@ body {
 .sa-rt-row-bar { flex:1; height:18px; background:var(--bg2); border-radius:4px; overflow:hidden; }
 .sa-rt-row-bar-i { height:100%; background:#f0a060; display:flex; align-items:center; padding:0 7px; font-size:10px; color:#fff; font-family:monospace; }
 
+/* 跨年回頭客 customer rows */
+.sa-rt-c { border-bottom:1px solid var(--bd); }
+.sa-rt-c-row { display:grid; grid-template-columns: 24px 1fr 70px 100px; gap:8px; padding:10px 16px; align-items:center; cursor:pointer; font-size:13px; }
+.sa-rt-c-row:hover { background:var(--bg2); }
+.sa-rt-c-arr { color:var(--tx3); font-size:11px; }
+.sa-rt-c-name { color:var(--tx); font-weight:500; }
+.sa-rt-c-count { color:#f0a060; font-weight:700; font-family:monospace; text-align:right; }
+.sa-rt-c-fee { color:#10b981; font-weight:600; font-family:monospace; text-align:right; }
+.sa-rt-c-detail { padding:0; }
+@media (max-width:520px) {
+  .sa-rt-c-row { grid-template-columns: 20px 1fr 56px 88px; padding:9px 12px; font-size:12.5px; }
+  .sa-rt-c-detail table { font-size:10.5px; }
+}
+
 @media (max-width:768px) {
   .sa-overview { grid-template-columns:1fr; gap:10px; }
   .sa-ov-big { border-right:none; border-bottom:1px solid var(--bd); padding:0 0 10px; }
@@ -3034,8 +3048,8 @@ function saRenderDashboard() {
         <div class="sa-rt-r">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
             <span style="font-size:11px;color:var(--tx3)">各區回頭客數量</span>
-            ${D.returning.detail && D.returning.detail.length ? `
-              <button onclick="saShowReturningDetail()" style="margin-left:auto;background:rgba(240,160,96,.15);border:1px solid #f0a060;color:#f0a060;border-radius:6px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit">📋 查看明細 (${D.returning.detail.length} 筆)</button>
+            ${D.returning.customers && D.returning.customers.length ? `
+              <button onclick="saShowReturningDetail()" style="margin-left:auto;background:rgba(240,160,96,.15);border:1px solid #f0a060;color:#f0a060;border-radius:6px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit">📋 跨年明細 (${D.returning.customers.length} 位)</button>
             ` : ''}
           </div>
           ${SA_AREAS.map(a => {
@@ -3383,80 +3397,113 @@ function saSetAreaLv(area, btn) {
   });
 }
 
-/* ── 回頭客明細 Modal ── */
-let saRtFilter = 'all';
+/* ── 回頭客 Modal（跨年聚合明細）── */
 function saShowReturningDetail() {
-  const detail = saData.returning.detail || [];
-  if (!detail.length) return;
-  saRtFilter = 'all';
+  const customers = (saData.returning && saData.returning.customers) || [];
+  if (!customers.length) return;
+  saRtSortKey = 'count';
+  saRtSearch  = '';
 
   const modal = document.createElement('div');
   modal.id = 'sa-rt-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:flex;align-items:center;justify-content:center;padding:14px;backdrop-filter:blur(2px)';
   modal.innerHTML = `
-    <div style="background:var(--bg1);border:1px solid var(--bd2);border-radius:12px;max-width:760px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+    <div style="background:var(--bg1);border:1px solid var(--bd2);border-radius:12px;max-width:680px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5)">
       <div style="padding:14px 18px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
         <div>
-          <div style="font-size:14px;font-weight:600;color:var(--tx)">回頭客明細</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:2px"><span id="sa-rt-modal-count">${detail.length}</span> 筆記錄 ｜ 依次數→團費降冪排序</div>
+          <div style="font-size:14px;font-weight:600;color:var(--tx)">跨年回頭客明細</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">
+            <span id="sa-rt-mc">${customers.length}</span> 位 ｜ 累計報名 ≥ 2 次
+          </div>
         </div>
         <button onclick="document.getElementById('sa-rt-modal').remove()" style="background:none;border:none;color:var(--tx3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">✕</button>
       </div>
-      <div style="padding:10px 14px;border-bottom:1px solid var(--bd);display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0">
-        <button class="dcr-fbtn active" data-rt="all"  onclick="saRtFilterDetail('all',this)">全部</button>
-        <button class="dcr-fbtn"        data-rt="野澤" onclick="saRtFilterDetail('野澤',this)">野澤</button>
-        <button class="dcr-fbtn"        data-rt="斑尾" onclick="saRtFilterDetail('斑尾',this)">斑尾</button>
-        <button class="dcr-fbtn"        data-rt="湯澤" onclick="saRtFilterDetail('湯澤',this)">湯澤</button>
-        <button class="dcr-fbtn"        data-rt="龍平" onclick="saRtFilterDetail('龍平',this)">龍平</button>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--bd);display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex-shrink:0">
+        <input id="sa-rt-q" type="text" placeholder="搜尋姓名..." oninput="saRtSearchChg(this.value)"
+          style="flex:1;min-width:130px;padding:6px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx);font-size:12px;font-family:inherit;outline:none">
+        <div style="display:flex;gap:4px">
+          <button class="dcr-fbtn active" onclick="saRtSetSort('count',this)">次數</button>
+          <button class="dcr-fbtn"        onclick="saRtSetSort('fee',this)">團費</button>
+          <button class="dcr-fbtn"        onclick="saRtSetSort('name',this)">姓名</button>
+        </div>
       </div>
       <div id="sa-rt-modal-body" style="overflow-y:auto;flex:1;min-height:0"></div>
     </div>`;
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
-  saRtRenderModal();
+  saRtRenderCustomerModal();
 }
 
-function saRtFilterDetail(area, btn) {
-  saRtFilter = area;
+/* ── 跨年回頭客明細：可展開 ── */
+let saRtSortKey = 'count';
+let saRtSearch  = '';
+
+function saRtSearchChg(v) { saRtSearch = (v||'').trim(); saRtRenderCustomerModal(); }
+function saRtSetSort(k, btn) {
+  saRtSortKey = k;
   btn.parentElement.querySelectorAll('.dcr-fbtn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  saRtRenderModal();
+  saRtRenderCustomerModal();
 }
-
-function saRtRenderModal() {
+function saRtSorted() {
+  const all = saData.returning.customers || [];
+  const q   = saRtSearch.toLowerCase();
+  const list = q ? all.filter(c => c.name.toLowerCase().includes(q)) : [...all];
+  if (saRtSortKey === 'fee')  list.sort((a, b) => b.total_fee - a.total_fee);
+  if (saRtSortKey === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+  return list;
+}
+function saRtToggle(rowEl) {
+  const wrap = rowEl.parentElement;
+  const det  = wrap.querySelector('.sa-rt-c-detail');
+  const arr  = rowEl.querySelector('.sa-rt-c-arr');
+  const open = det.style.display !== 'none';
+  det.style.display = open ? 'none' : 'block';
+  arr.textContent   = open ? '▸' : '▾';
+}
+function saRtRenderCustomerModal() {
   const body = document.getElementById('sa-rt-modal-body');
-  const cntEl = document.getElementById('sa-rt-modal-count');
+  const cnt  = document.getElementById('sa-rt-mc');
   if (!body) return;
-  const all = saData.returning.detail || [];
-  const list = saRtFilter === 'all' ? all : all.filter(r => r.area === saRtFilter);
-  if (cntEl) cntEl.textContent = list.length;
+  const list = saRtSorted();
+  if (cnt) cnt.textContent = list.length;
+  if (!list.length) { body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--tx3);font-size:12px">無符合資料</div>'; return; }
 
-  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead style="position:sticky;top:0;background:var(--bg2);z-index:1">
-      <tr>
-        <th style="text-align:left;padding:9px 12px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">雪場</th>
-        <th style="text-align:left;padding:9px 8px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">姓名</th>
-        <th style="text-align:center;padding:9px 6px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">類型</th>
-        <th style="text-align:right;padding:9px 10px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">團費</th>
-        <th style="text-align:center;padding:9px 8px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">出發日</th>
-        <th style="text-align:center;padding:9px 8px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">次數</th>
-      </tr>
-    </thead>
-    <tbody>`;
-  for (const r of list) {
-    const skiColor = r.ski === '單板' ? '#06b6d4' : r.ski === '雙板' ? '#f59e0b' : 'var(--tx3)';
-    const depShort = r.dep ? r.dep.replace(/^20/, '').replace(/^\d{4}\//, m => m.slice(2)) : '—';
-    html += `<tr style="border-bottom:1px solid var(--bd)">
-      <td style="padding:8px 12px;color:${SA_AC[r.area] || 'var(--tx)'};font-weight:500">${r.area}</td>
-      <td style="padding:8px 8px;color:var(--tx)">${r.name}</td>
-      <td style="padding:8px 6px;text-align:center;color:${skiColor};font-weight:500;font-size:11px">${r.ski || '—'}</td>
-      <td style="padding:8px 10px;text-align:right;font-family:monospace;color:var(--tx)">${r.fee.toLocaleString()}</td>
-      <td style="padding:8px 8px;text-align:center;font-size:11px;color:var(--tx3);font-family:monospace">${depShort}</td>
-      <td style="padding:8px 8px;text-align:center"><span style="background:rgba(240,160,96,.18);color:#f0a060;font-weight:700;padding:2px 8px;border-radius:10px;font-size:11px;font-family:monospace">${r.visits}</span></td>
-    </tr>`;
-  }
-  html += '</tbody></table>';
-  if (!list.length) html = '<div style="padding:40px;text-align:center;color:var(--tx3);font-size:12px">無資料</div>';
+  let html = '';
+  list.forEach(c => {
+    html += `<div class="sa-rt-c">
+      <div class="sa-rt-c-row" onclick="saRtToggle(this)">
+        <span class="sa-rt-c-arr">▸</span>
+        <span class="sa-rt-c-name">${c.name}</span>
+        <span class="sa-rt-c-count">${c.total_signups} 次</span>
+        <span class="sa-rt-c-fee">${c.total_fee.toLocaleString()}</span>
+      </div>
+      <div class="sa-rt-c-detail" style="display:none">
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px;background:var(--bg0)">
+          <thead><tr>
+            <th style="text-align:left;padding:6px 8px 6px 32px;color:var(--tx3);font-size:10px;font-weight:600">雪季</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--tx3);font-size:10px;font-weight:600">雪場</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--tx3);font-size:10px;font-weight:600">出發日</th>
+            <th style="text-align:center;padding:6px 6px;color:var(--tx3);font-size:10px;font-weight:600">類型</th>
+            <th style="text-align:right;padding:6px 14px 6px 8px;color:var(--tx3);font-size:10px;font-weight:600">團費</th>
+          </tr></thead>
+          <tbody>
+            ${c.signups.map(s => {
+              const skiC = s.ski === '單板' ? '#06b6d4' : s.ski === '雙板' ? '#f59e0b' : 'var(--tx3)';
+              const dep  = s.date ? s.date.replace(/^20/, '').replace(/^\d{4}\//, m => m.slice(2)) : '—';
+              return `<tr style="border-top:1px solid var(--bd)">
+                <td style="padding:6px 8px 6px 32px;color:#8b5cf6;font-family:monospace;font-size:10.5px">${s.season}</td>
+                <td style="padding:6px 8px;color:${SA_AC[s.area]||'var(--tx)'};font-weight:500">${s.area}</td>
+                <td style="padding:6px 8px;color:var(--tx2);font-family:monospace;font-size:10.5px">${dep}</td>
+                <td style="padding:6px 6px;text-align:center;color:${skiC};font-size:10.5px;font-weight:500">${s.ski || '—'}</td>
+                <td style="padding:6px 14px 6px 8px;text-align:right;color:var(--tx);font-family:monospace">${s.fee.toLocaleString()}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
   body.innerHTML = html;
 }
 
