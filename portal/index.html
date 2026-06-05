@@ -473,10 +473,10 @@ body {
   background:var(--bg3); padding:1px 7px; border-radius:8px;
 }
 
-/* ── 我的班表（日曆：滿版整月）── */
-.mys-page { display:flex; flex-direction:column; height:calc(100dvh - var(--top-h)); padding:14px 16px 16px; overflow:hidden; }
-.mys-top  { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px; flex-shrink:0; }
-.mys-title-block { display:flex; align-items:baseline; gap:14px; }
+/* ── 我的班表（日曆：寬度自適應，格子近似正方形）── */
+.mys-page { padding:14px 16px 24px; max-width:1000px; margin:0 auto; }
+.mys-top  { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.mys-title-block { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
 .mys-title { font-size:14px; color:var(--tx2); font-weight:500; }
 .mys-title b { color:var(--tx); font-weight:600; }
 .mys-month-display { display:flex; align-items:baseline; gap:7px; }
@@ -490,20 +490,26 @@ body {
 .mys-today-btn { font-size:12px; padding:6px 12px; border-radius:7px; border:1px solid var(--bd); background:var(--bg2); color:var(--tx2); cursor:pointer; font-family:inherit; font-weight:500; transition:all .15s; }
 .mys-today-btn:hover { background:var(--bg3); color:var(--tx); border-color:var(--bd2); }
 
-/* 日曆主體：fill 剩餘高度，rows 平均分配 */
+/* 日曆主體：寬度滿版，格子 aspect-ratio 控制高度 */
 .mys-cal {
-  flex:1; min-height:0;
   display:grid;
   grid-template-columns:repeat(7, 1fr);
-  grid-template-rows:auto repeat(var(--rows, 6), minmax(0, 1fr));
   border:1px solid var(--bd); border-radius:10px; overflow:hidden;
   background:var(--bg1);
 }
-.mys-wd { background:var(--bg2); padding:7px 0; text-align:center; font-size:11.5px; font-weight:600; color:var(--tx2); border-right:1px solid var(--bd); border-bottom:1px solid var(--bd); letter-spacing:.5px; }
+.mys-wd { background:var(--bg2); padding:8px 0; text-align:center; font-size:11.5px; font-weight:600; color:var(--tx2); border-right:1px solid var(--bd); border-bottom:1px solid var(--bd); letter-spacing:.5px; }
 .mys-wd:nth-child(7n) { border-right:none; }
 .mys-wd.we { color:#f0c060; }
 
-.mys-day { min-width:0; min-height:0; padding:5px 7px 4px; display:flex; flex-direction:column; background:var(--bg1); border-right:1px solid var(--bd); border-bottom:1px solid var(--bd); position:relative; overflow:hidden; }
+.mys-day {
+  aspect-ratio: 1 / 1;            /* 格子近似正方形 */
+  min-width:0;
+  padding:5px 6px 4px;
+  display:flex; flex-direction:column;
+  background:var(--bg1);
+  border-right:1px solid var(--bd); border-bottom:1px solid var(--bd);
+  position:relative; overflow:hidden;
+}
 .mys-day:nth-child(7n) { border-right:none; }
 .mys-day.we-col { background:#000a16; }
 .mys-day.other-month { background:#00080f; }
@@ -514,15 +520,15 @@ body {
 .mys-day-num.we { color:#f0c060; }
 .mys-day.today .mys-day-num { color:#60b3f4; font-weight:700; }
 .mys-day.today .today-dot { width:5px; height:5px; border-radius:50%; background:#60b3f4; box-shadow:0 0 4px #60b3f4; }
-.mys-day-val { font-size:12px; color:var(--tx); margin-top:auto; line-height:1.25; word-break:break-all; flex:1; overflow:hidden; display:flex; align-items:center; justify-content:flex-start; padding-top:4px; }
+.mys-day-val { font-size:12px; color:var(--tx); margin-top:4px; line-height:1.25; word-break:break-all; flex:1; overflow:hidden; }
 .mys-day-val.off { color:var(--tx3); font-style:italic; }
 .mys-day-val.train { color:#6dddaa; }
 
-/* 最後一行（已 overflow hidden 圓角，但確保視覺整齊）*/
+/* 最後一行不重複底線 */
 .mys-cal > .mys-day:nth-last-of-type(-n+7) { border-bottom:none; }
 
 @media (max-width:520px) {
-  .mys-page { padding:10px 10px 12px; }
+  .mys-page { padding:10px 10px 18px; }
   .mys-top { gap:6px; margin-bottom:8px; }
   .mys-title { font-size:12px; }
   .mys-month { font-size:17px; }
@@ -530,8 +536,9 @@ body {
   .mys-nav { width:28px; height:28px; font-size:13px; }
   .mys-today-btn { padding:5px 10px; font-size:11px; }
   .mys-day { padding:3px 4px 2px; }
-  .mys-day-num { font-size:11px; }
-  .mys-day-val { font-size:10.5px; padding-top:2px; line-height:1.15; }
+  .mys-day-num { font-size:10.5px; gap:3px; }
+  .mys-day-num .today-dot { width:4px; height:4px; }
+  .mys-day-val { font-size:9.5px; margin-top:2px; line-height:1.15; }
   .mys-wd { padding:5px 0; font-size:10.5px; letter-spacing:0; }
 }
 
@@ -2154,7 +2161,7 @@ async function renderMySchedule() {
         <button id="mys-next"  class="mys-nav" aria-label="後一月">›</button>
       </div>
     </div>
-    <div class="mys-cal" id="mys-cal" style="--rows:6">
+    <div class="mys-cal" id="mys-cal">
       <div class="loading" style="grid-column:1/-1"><div class="spin"></div> 載入中</div>
     </div>`;
 
@@ -2268,7 +2275,6 @@ function renderMyCalendar() {
   /* ── 計算總格數：firstWday + daysInMonth → 補齊至 7 倍數（5 或 6 行） ── */
   const weeks      = Math.ceil((firstWday + daysInMonth) / 7);
   const totalCells = weeks * 7;
-  cal.style.setProperty('--rows', weeks);
 
   for (let i = 0; i < totalCells; i++) {
     const dayPos = i - firstWday + 1;   // 本月第 dayPos 日；<=0 為上月，>daysInMonth 為下月
