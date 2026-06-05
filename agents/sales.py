@@ -1,0 +1,514 @@
+"""
+agents/sales.py
+SALES 銷量分析員
+─────────────────────────────────────────────
+職責：
+  1. 讀取當季最新原始大總表 + 歷年大總表
+  2. 計算各種統計（總覽、每日新增、出發分布、客群、加購）
+  3. 識別回頭客（中文姓名+生日 OR 護照號碼）
+  4. 與去年同期/同日比較（YoY）
+  5. 輸出 portal/sales_data.json（純統計，不含個資）
+
+檔案辨識：
+  原始大總表XXXX.xlsx  → 當季最新（XXXX = 任意，取最新 mtime）
+  原始大總表YY-YY.xlsx → 歷年資料（如 25-26）
+
+觸發時機：
+  納入 main.py --all 每日流程，CLEANER 後執行
+  單獨：python main.py --sales
+─────────────────────────────────────────────
+"""
+
+import os
+import sys
+import re
+import json
+import glob
+from datetime import datetime
+from collections import defaultdict
+
+import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_JSON = os.path.join(BASE_DIR, 'portal', 'sales_data.json')
+AREAS       = ['野澤', '斑尾', '湯澤', '龍平']
+
+
+# ═══════════════════════════════════════════
+# 檔案辨識
+# ═══════════════════════════════════════════
+
+def find_xlsx_files():
+    """掃描 BASE_DIR 找出當季 + 歷年大總表
+    當季 = 不符 YY-YY 命名 的 原始大總表*.xlsx 中最新者
+    歷年 = 符合 原始大總表YY-YY.xlsx
+    """
+    all_files = glob.glob(os.path.join(BASE_DIR, '原始大總表*.xlsx'))
+    current_candidates = []
+    historical = []
+
+    for f in all_files:
+        name = os.path.basename(f)
+        m = re.search(r'原始大總表(\d\d)-(\d\d)\.xlsx$', name)
+        if m:
+            season = f"{m.group(1)}/{m.group(2)}"
+            historical.append((season, f))
+        else:
+            current_candidates.append(f)
+
+    current = max(current_candidates, key=os.path.getmtime) if current_candidates else None
+    historical.sort(key=lambda x: x[0])
+    return current, historical
+
+
+def load_xlsx(path):
+    """同 cleaner 邏輯：第2列為標題、第3列起為資料、重複欄位加 _N"""
+    df_raw = pd.read_excel(path, header=None)
+    headers = df_raw.iloc[1].tolist()
+    seen = {}
+    new_headers = []
+    for h in headers:
+        s = str(h)
+        if s in seen:
+            seen[s] += 1
+            new_headers.append(f"{s}_{seen[s]}")
+        else:
+            seen[s] = 1
+            new_headers.append(s)
+    df = df_raw.iloc[2:].copy()
+    df.columns = new_headers
+    df = df.reset_index(drop=True)
+    if '團號' in df.columns:
+        df = df[df['團號'] != '數量小計'].copy()
+    return df
+
+
+# ═══════════════════════════════════════════
+# 區域 / Level / 加購 判斷
+# ═══════════════════════════════════════════
+
+def get_area(g):
+    if pd.isna(g): return ''
+    s = str(g)
+    if 'ZN' in s: return '野澤'
+    if 'ZB' in s: return '斑尾'
+    if 'ZY' in s: return '湯澤'
+    if 'YS' in s or 'NT' in s: return '龍平'
+    if 'BT' in s: return '斑尾'
+    if 'N' in s:  return '野澤'
+    if 'B' in s:  return '斑尾'
+    return ''
+
+
+def is_pure(g):
+    if pd.isna(g): return False
+    s = str(g)
+    return 'ZN' in s or 'ZB' in s or 'ZY' in s
+
+
+def norm_level(lv):
+    if pd.isna(lv) or str(lv).strip() == '': return ''
+    m = re.search(r'(\d+)', str(lv))
+    return f'lv{m.group(1)}' if m else ''
+
+
+def find_addon_cols(headers):
+    H = [str(h) for h in headers]
+    return {
+        '續滑含教練': [h for h in H if ('續滑' in h or '加滑' in h) and '含' in h and '不含' not in h and '保留' not in h],
+        '續滑不含':   [h for h in H if ('續滑' in h or '加滑' in h) and '不含' in h and '保留' not in h],
+        '專屬教練':   [h for h in H if '專屬' in h],
+        '租借衣褲':   [h for h in H if '租借' in h and '雪衣' in h],
+        '租借護膝':   [h for h in H if '租借' in h and '護膝' in h],
+        '租借護臀':   [h for h in H if '租借' in h and '護臀' in h],
+        '租借手套':   [h for h in H if '租借' in h and '手套' in h],
+    }
+
+
+def row_has_value(row, cols):
+    for c in cols:
+        if c in row.index:
+            v = row[c]
+            if pd.notna(v) and v != 0 and str(v).strip() not in ('', '0'):
+                return True
+    return False
+
+
+# ═══════════════════════════════════════════
+# 回頭客 key
+# ═══════════════════════════════════════════
+
+def customer_keys(row):
+    """產生可能的旅客唯一 key：中文姓名+生日 / 護照號碼"""
+    keys = []
+    name = str(row.get('中文姓名', '') or '').strip()
+    bday = str(row.get('生日', '') or '').strip()
+    if name and bday and bday.lower() != 'nan' and name.lower() != 'nan':
+        keys.append(f"NB:{name}|{bday}")
+    passport = str(row.get('護照號碼', '') or '').strip()
+    if passport and passport.lower() != 'nan' and len(passport) >= 4:
+        keys.append(f"P:{passport.upper()}")
+    return keys
+
+
+# ═══════════════════════════════════════════
+# 統計
+# ═══════════════════════════════════════════
+
+def compute_overview(df):
+    df = df.copy()
+    df['_area'] = df['團號'].apply(get_area)
+    df['_pure'] = df['團號'].apply(is_pure)
+    df['_fee']  = pd.to_numeric(
+        df['團費'].astype(str).str.replace(',', '').str.replace(' ', ''),
+        errors='coerce',
+    )
+
+    total_pax     = len(df)
+    total_orders  = int(df['訂單編號'].nunique()) if '訂單編號' in df.columns else 0
+    total_revenue = int(df['_fee'].sum())
+    avg_fee       = int(df['_fee'].mean()) if total_pax > 0 else 0
+
+    areas = {}
+    for a in AREAS:
+        sub = df[df['_area'] == a]
+        if len(sub) == 0: continue
+        pure = int(sub['_pure'].sum())
+        group = len(sub) - pure
+        areas[a] = {
+            'total': len(sub),
+            'group': group,
+            'pure':  pure,
+            'pct':   round(len(sub) / total_pax * 100, 1) if total_pax else 0,
+        }
+
+    return {
+        'total_pax':     total_pax,
+        'total_orders':  total_orders,
+        'total_revenue': total_revenue,
+        'avg_fee':       avg_fee,
+        'areas':         areas,
+    }
+
+
+def compute_daily_signup(df):
+    df = df.copy()
+    df['_area']   = df['團號'].apply(get_area)
+    df['_signup'] = pd.to_datetime(df['報名日期'], errors='coerce')
+
+    grouped = df.groupby([df['_signup'].dt.date, '_area']).size().unstack(fill_value=0)
+    result = []
+    for d in sorted(grouped.index):
+        if not pd.notna(d): continue
+        row = {'d': str(d), 'total': 0}
+        for a in AREAS:
+            v = int(grouped.loc[d, a]) if a in grouped.columns else 0
+            row[a] = v
+            row['total'] += v
+        result.append(row)
+    return result
+
+
+def compute_cumulative(daily_list):
+    cum = 0
+    out = []
+    for r in daily_list:
+        cum += r['total']
+        out.append({'d': r['d'], 'c': cum})
+    return out
+
+
+def _parse_dep(v):
+    if pd.isna(v): return None
+    s = str(v).strip()
+    for fmt in ('%y/%m/%d', '%Y/%m/%d', '%Y-%m-%d'):
+        try: return pd.to_datetime(s, format=fmt)
+        except (ValueError, TypeError): pass
+    try: return pd.to_datetime(s)
+    except (ValueError, TypeError): return None
+
+
+def compute_departure(df):
+    df = df.copy()
+    df['_area'] = df['團號'].apply(get_area)
+    df['_dep']  = df['出發日期'].apply(_parse_dep)
+
+    grouped = df.groupby([df['_dep'].dt.date, '_area']).size().unstack(fill_value=0)
+    result = []
+    for d in sorted(grouped.index):
+        if not pd.notna(d): continue
+        row = {'d': str(d), 'total': 0}
+        for a in AREAS:
+            v = int(grouped.loc[d, a]) if a in grouped.columns else 0
+            row[a] = v
+            row['total'] += v
+        result.append(row)
+    return result
+
+
+def compute_demographics(df):
+    df = df.copy()
+    df['_lv']  = df['LEVEL'].apply(norm_level) if 'LEVEL' in df.columns else ''
+    df['_age'] = pd.to_numeric(df['年齡'], errors='coerce') if '年齡' in df.columns else None
+
+    gender = {}
+    if '性別' in df.columns:
+        gender = {str(k): int(v) for k, v in df['性別'].value_counts().items() if str(k) not in ('nan', '')}
+
+    ski = {}
+    if '滑雪類別' in df.columns:
+        ski = {str(k): int(v) for k, v in df['滑雪類別'].value_counts().items() if str(k) not in ('nan', '')}
+
+    level_dist = {k: int(v) for k, v in df['_lv'].value_counts().items() if k}
+
+    age_dist = {}
+    if df['_age'] is not None and df['_age'].notna().any():
+        bins   = [0, 18, 25, 30, 35, 40, 50, 100]
+        labels = ['18以下','19-25','26-30','31-35','36-40','41-50','51+']
+        age_cut = pd.cut(df['_age'], bins=bins, labels=labels, right=True)
+        age_dist = {str(k): int(v) for k, v in age_cut.value_counts().sort_index().items()}
+
+    return {
+        'gender':   gender,
+        'ski_type': ski,
+        'level':    level_dist,
+        'age':      age_dist,
+    }
+
+
+def compute_area_level(df):
+    df = df.copy()
+    df['_area'] = df['團號'].apply(get_area)
+    df['_lv']   = df['LEVEL'].apply(norm_level) if 'LEVEL' in df.columns else ''
+
+    result = {a: {} for a in AREAS}
+    for area in AREAS:
+        sub = df[(df['_area'] == area) & (df['_lv'] != '')]
+        for lv, cnt in sub['_lv'].value_counts().items():
+            result[area][lv] = int(cnt)
+    return result
+
+
+def compute_addons(df):
+    addon_cols = find_addon_cols(df.columns)
+    result = {}
+    for name, cols in addon_cols.items():
+        if not cols:
+            result[name] = 0
+            continue
+        result[name] = int(df.apply(lambda r: row_has_value(r, cols), axis=1).sum())
+    return result
+
+
+# ═══════════════════════════════════════════
+# 回頭客
+# ═══════════════════════════════════════════
+
+def compute_returning(current_df, historical_dfs):
+    """
+    歷年資料聚合：每位旅客在歷年出現過幾次（年度去重）
+    本季旅客若 key 命中歷年，視為回頭客
+    """
+    historical_year_count = defaultdict(int)   # key → 來過幾年
+
+    for hist_df in historical_dfs:
+        seen_this_year = set()
+        for _, row in hist_df.iterrows():
+            for k in customer_keys(row):
+                if k not in seen_this_year:
+                    seen_this_year.add(k)
+                    historical_year_count[k] += 1
+
+    current_df = current_df.copy()
+    current_df['_area'] = current_df['團號'].apply(get_area)
+
+    returning_count = 0
+    by_area = defaultdict(int)
+    times_dist = defaultdict(int)
+    seen_visitors_this_season = set()
+
+    for _, row in current_df.iterrows():
+        keys = customer_keys(row)
+        if not keys: continue
+
+        # 同人在本季可能多筆，這裡按人計算（去重）
+        primary_key = keys[0]
+        if primary_key in seen_visitors_this_season: continue
+        seen_visitors_this_season.add(primary_key)
+
+        matched_years = 0
+        for k in keys:
+            matched_years = max(matched_years, historical_year_count.get(k, 0))
+
+        if matched_years > 0:
+            returning_count += 1
+            area = row.get('_area', '')
+            if area: by_area[area] += 1
+            total_visits = matched_years + 1   # 含本季
+            label = '4+' if total_visits >= 4 else str(total_visits)
+            times_dist[label] += 1
+
+    total_unique = len(seen_visitors_this_season)
+    return {
+        'count': returning_count,
+        'total_unique': total_unique,
+        'pct': round(returning_count / total_unique * 100, 1) if total_unique else 0,
+        'by_area': dict(by_area),
+        'times_dist': dict(times_dist),
+    }
+
+
+# ═══════════════════════════════════════════
+# YoY 比較
+# ═══════════════════════════════════════════
+
+def _to_season_day(d, season_start_month=8):
+    """日期 → 該雪季的第幾天（8/1 = day 1）"""
+    if pd.isna(d): return None
+    if d.month >= season_start_month:
+        season_start = pd.Timestamp(d.year, season_start_month, 1)
+    else:
+        season_start = pd.Timestamp(d.year - 1, season_start_month, 1)
+    return (d - season_start).days
+
+
+def compute_yoy(current_df, historical_dfs, historical_seasons):
+    """跟最近一季歷年資料做：
+    - 同檔期累積（以雪季起始日為基準）
+    - 同日比（同 月/日 出發人次對照）
+    """
+    if not historical_dfs:
+        return None
+
+    prev_df     = historical_dfs[-1]
+    prev_season = historical_seasons[-1]
+
+    cur_signup  = pd.to_datetime(current_df['報名日期'], errors='coerce')
+    prev_signup = pd.to_datetime(prev_df['報名日期'], errors='coerce')
+
+    cur_days  = cur_signup.dropna().apply(_to_season_day)
+    prev_days = prev_signup.dropna().apply(_to_season_day)
+
+    cur_days_count  = cur_days.value_counts().sort_index()
+    prev_days_count = prev_days.value_counts().sort_index()
+
+    cur_max  = int(cur_days_count.index.max())  if len(cur_days_count)  else 0
+    prev_max = int(prev_days_count.index.max()) if len(prev_days_count) else 0
+    max_day  = max(cur_max, prev_max)
+
+    cur_cum, prev_cum = [], []
+    c = p = 0
+    for d in range(max_day + 1):
+        c += int(cur_days_count.get(d, 0))
+        p += int(prev_days_count.get(d, 0))
+        cur_cum.append(c)
+        prev_cum.append(p)
+
+    # 同日比（出發日 月/日）
+    cur_dep_md = current_df['出發日期'].apply(_parse_dep).dropna() \
+                    .apply(lambda d: f"{d.month:02d}/{d.day:02d}")
+    prev_dep_md = prev_df['出發日期'].apply(_parse_dep).dropna() \
+                    .apply(lambda d: f"{d.month:02d}/{d.day:02d}")
+    cur_md  = cur_dep_md.value_counts().sort_index()
+    prev_md = prev_dep_md.value_counts().sort_index()
+
+    all_md = sorted(set(cur_md.index) | set(prev_md.index))
+
+    return {
+        'prev_season': prev_season,
+        'same_period': {
+            'days':    list(range(max_day + 1)),
+            'current': cur_cum,
+            'prev':    prev_cum,
+        },
+        'same_date': {
+            'labels':  all_md,
+            'current': [int(cur_md.get(m, 0))  for m in all_md],
+            'prev':    [int(prev_md.get(m, 0)) for m in all_md],
+        },
+    }
+
+
+# ═══════════════════════════════════════════
+# 主程式
+# ═══════════════════════════════════════════
+
+def run():
+    print("=" * 50)
+    print("SALES 銷量分析員 啟動")
+    print("=" * 50)
+
+    current_path, historical = find_xlsx_files()
+    if not current_path:
+        print("找不到當季原始大總表，跳過")
+        return
+
+    print(f"當季：{os.path.basename(current_path)}")
+    print(f"歷年：{[s for s, _ in historical]}")
+
+    print("\n載入當季資料...")
+    current_df = load_xlsx(current_path)
+    print(f"  {len(current_df)} 筆")
+
+    print("\n載入歷年資料...")
+    historical_dfs = []
+    historical_seasons = []
+    for season, path in historical:
+        df = load_xlsx(path)
+        historical_dfs.append(df)
+        historical_seasons.append(season)
+        print(f"  {season}: {len(df)} 筆")
+
+    print("\n計算統計...")
+    overview     = compute_overview(current_df)
+    daily        = compute_daily_signup(current_df)
+    cumulative   = compute_cumulative(daily)
+    departure    = compute_departure(current_df)
+    demographics = compute_demographics(current_df)
+    area_level   = compute_area_level(current_df)
+    addons       = compute_addons(current_df)
+
+    print("計算回頭客...")
+    returning = compute_returning(current_df, historical_dfs)
+    print(f"  本季不重複旅客：{returning['total_unique']}")
+    print(f"  回頭客：{returning['count']} 人 ({returning['pct']}%)")
+
+    print("計算 YoY 對比...")
+    yoy = compute_yoy(current_df, historical_dfs, historical_seasons)
+
+    # ── 自動推算當季標籤 ──
+    today    = datetime.now()
+    cur_year = today.year - 2000
+    if today.month >= 8:
+        current_season = f"{cur_year}/{cur_year+1}"
+    else:
+        current_season = f"{cur_year-1}/{cur_year}"
+
+    output = {
+        'updated':            datetime.now().strftime('%Y/%m/%d %H:%M'),
+        'current_season':     current_season,
+        'historical_seasons': historical_seasons,
+        'overview':           overview,
+        'daily_signup':       daily,
+        'cumulative':         cumulative,
+        'departure':          departure,
+        'demographics':       demographics,
+        'area_level':         area_level,
+        'addons':             addons,
+        'returning':          returning,
+        'yoy':                yoy,
+    }
+
+    os.makedirs(os.path.dirname(OUTPUT_JSON), exist_ok=True)
+    with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
+        json.dump(output, f, ensure_ascii=False, separators=(',', ':'))
+
+    size_kb = os.path.getsize(OUTPUT_JSON) / 1024
+    print(f"\nOK 輸出 {os.path.basename(OUTPUT_JSON)} ({size_kb:.1f} KB)")
+    print("=" * 50)
+
+
+if __name__ == '__main__':
+    run()

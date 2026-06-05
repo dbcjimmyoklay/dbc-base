@@ -70,12 +70,17 @@ def run():
 
     # ── 1. 找最新 xlsx ──
     # 本機優先；若本機找不到（例如在 GitHub Actions 執行），從 Google Drive 下載
-    files = glob.glob(os.path.join(BASE_DIR, '原始大總表*.xlsx'))
+    # 排除歷年大總表（命名格式 YY-YY，僅用於銷量分析）
+    import re as _re
+    def _is_current(p):
+        return _re.search(r'原始大總表\d\d-\d\d\.xlsx$', os.path.basename(p)) is None
+
+    files = [f for f in glob.glob(os.path.join(BASE_DIR, '原始大總表*.xlsx')) if _is_current(f)]
     if not files:
         print("本機找不到原始大總表*.xlsx，嘗試從 Google Drive 下載...")
         from shared.drive import download_latest_xlsx
         download_latest_xlsx(dest_dir=BASE_DIR)
-        files = glob.glob(os.path.join(BASE_DIR, '原始大總表*.xlsx'))
+        files = [f for f in glob.glob(os.path.join(BASE_DIR, '原始大總表*.xlsx')) if _is_current(f)]
         if not files:
             raise FileNotFoundError("Google Drive 下載後仍找不到原始大總表*.xlsx")
 

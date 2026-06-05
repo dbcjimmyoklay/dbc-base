@@ -123,6 +123,12 @@ def run_checkout():
     run_agent('CHECKOUT 送客員', checkout_run)
 
 
+def run_sales():
+    """銷量分析：讀當季+歷年大總表，輸出 portal/sales_data.json"""
+    from agents.sales import run as sales_run
+    run_agent('SALES 銷量分析員', sales_run)
+
+
 def run_daily(skip_watcher=False, skip_reporter=False):
     """
     每日自動流程：
@@ -161,6 +167,15 @@ def run_daily(skip_watcher=False, skip_reporter=False):
         results['reporter'] = ok
     else:
         print("\n  -- 略過 REPORTER --")
+
+    # 6. SALES（銷量分析 JSON，給 Portal 用）
+    try:
+        from agents.sales import run as sales_run
+        ok, _, _ = run_agent('SALES 銷量分析員', sales_run)
+        results['sales'] = ok
+    except Exception as e:
+        print(f"\n  -- SALES 略過：{e} --")
+        results['sales'] = False
 
     # 6. 完整大表.xlsx
     print(f"\n{'-' * 50}")
@@ -208,6 +223,7 @@ def main():
     parser.add_argument('--reporter', action='store_true', help='只執行 REPORTER 報表員')
     parser.add_argument('--checkin',  action='store_true', help='執行 CHECKIN 入住員（手動觸發）')
     parser.add_argument('--checkout', action='store_true', help='只執行 CHECKOUT 送客員')
+    parser.add_argument('--sales',    action='store_true', help='只執行 SALES 銷量分析員')
     parser.add_argument('--all',      action='store_true', help='執行全部（含 CHECKIN）')
 
     # 略過某個工作員
@@ -242,6 +258,10 @@ def main():
 
     if args.checkout:
         run_checkout()
+        return
+
+    if args.sales:
+        run_sales()
         return
 
     # ── 全部（含 CHECKIN）──
