@@ -491,10 +491,10 @@ body {
 /* 地區分隔列（仿 c-sep）*/
 .cs-area { position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%; background:#0f3060; color:#a8d8ff; font-weight:700; font-size:12.5px; padding:6px 14px; border-top:3px solid #2a7fc0; border-bottom:2px solid #1a5a8a; letter-spacing:.3px; }
 
-/* 教練名稱列（仿 c-label，sticky left 2列模式）*/
-.cs-label { position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%; background:#000e20; padding:4px 12px 3px; border-top:1px solid var(--bd); display:flex; align-items:baseline; }
-.cs-coach { font-size:12.5px; font-weight:500; color:var(--tx); }
-.cs-off-label { margin-left:8px; font-size:10px; color:var(--tx3); font-family:monospace; }
+/* 教練名稱列（仿 c-label，sticky left 2列模式；高度縮小 25%）*/
+.cs-label { position:-webkit-sticky; position:sticky; left:0; z-index:3; width:100%; background:#000e20; padding:2px 12px 1px; border-top:1px solid var(--bd); display:flex; align-items:baseline; line-height:1.25; }
+.cs-coach { font-size:11px; font-weight:500; color:var(--tx); }
+.cs-off-label { margin-left:8px; font-size:9.5px; color:var(--tx3); font-family:monospace; }
 
 /* 排班資料列 */
 .cs-data-row { display:grid; width:max-content; min-width:100%; }
@@ -1875,13 +1875,14 @@ async function refreshCoach() {
   await loadCoach();
 }
 
-/* 判斷地區分隔列：col0 是 '野澤'/'斑尾'/'班尾'/'湯澤'/'京都'，其他欄空 */
+/* 判斷地區分隔列：col0 是地區名 + col1（休假數）為空
+   （野澤列右側可能有其他標註如 SAJ-SKI，不能要求整列空）*/
 function csIsArea(row) {
   if (!Array.isArray(row) || !row.length) return false;
   const v0 = String(row[0] || '').trim();
   if (!['野澤','斑尾','班尾','湯澤','京都'].includes(v0)) return false;
-  for (let i = 1; i < row.length; i++) if (String(row[i] || '').trim()) return false;
-  return true;
+  const v1 = String(row[1] || '').trim();
+  return !v1;   // 休假數欄為空 → 地區分隔列；有數字 → 該地區教練同名（極少）
 }
 
 /* 偵測有效日期欄範圍：日期列(index 1) 非空者算入 */
@@ -1917,6 +1918,34 @@ function csParseDate(s) {
   return { month: m, day: d, wday: CS_WDAY[dt.getDay()], dispDate: `${m}/${d}` };
 }
 
+/* 估算文字寬度：英數 7px、中文/其他 12px（小字型）*/
+function csTextWidth(s) {
+  s = String(s || '');
+  let w = 0;
+  for (const ch of s) w += /[\x00-\xff]/.test(ch) ? 7 : 12;
+  return w;
+}
+
+/* 每個日期欄寬：掃描全部資料找最長 → 加 padding → 夾在 [38, 110] */
+function csComputeColWidths(rows, endCol) {
+  const widths = [];
+  for (let c = 2; c < endCol; c++) {
+    let maxW = 0;
+    for (let r = 3; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row) continue;
+      if (csIsArea(row)) continue;
+      const w = csTextWidth(row[c]);
+      if (w > maxW) maxW = w;
+    }
+    // 日期/曜日 header 也要塞得下（M/D + 曜日字）
+    const hdrW = csTextWidth(String(rows[1] && rows[1][c] || '')) + 4;
+    if (hdrW > maxW) maxW = hdrW;
+    widths.push(Math.min(110, Math.max(38, maxW + 12)));
+  }
+  return widths;
+}
+
 /* 取得字體顏色（從 Sheet getFontColors）；黑色或預設 → 用 var(--tx) */
 function csFontStyle(r, c) {
   if (!csColors || !csColors[r] || !csColors[r][c]) return '';
@@ -1950,8 +1979,9 @@ function renderCSGrid() {
     dateInfo.push(parsed || { dispDate: String(dateRow[c]||''), wday: '', month: 0, day: 0 });
   }
 
-  /* day grid（每日 CS_COL_DAY） */
-  const gridCols = `repeat(${nDays}, ${CS_COL_DAY}px)`;
+  /* 每日欄寬：依資料動態計算 */
+  const widths   = csComputeColWidths(rows, endCol);
+  const gridCols = widths.map(w => w + 'px').join(' ');
 
   let html = '';
 
