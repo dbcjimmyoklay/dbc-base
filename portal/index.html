@@ -3036,7 +3036,12 @@ function saRenderDashboard() {
           <div class="l">本季 ${D.returning.total_unique.toLocaleString()} 位旅客中</div>
         </div>
         <div class="sa-rt-r">
-          <div style="font-size:11px;color:var(--tx3);margin-bottom:2px">各區回頭客數量</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--tx3)">各區回頭客數量</span>
+            ${D.returning.detail && D.returning.detail.length ? `
+              <button onclick="saShowReturningDetail()" style="margin-left:auto;background:rgba(240,160,96,.15);border:1px solid #f0a060;color:#f0a060;border-radius:6px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit">📋 查看明細 (${D.returning.detail.length} 筆)</button>
+            ` : ''}
+          </div>
           ${SA_AREAS.map(a => {
             const v = D.returning.by_area[a] || 0;
             const max = Math.max(...Object.values(D.returning.by_area), 1);
@@ -3371,6 +3376,83 @@ function saSetAreaLv(area, btn) {
     data:{ labels: keys.map(k => SA_LL[k]||k), datasets:[{ data: keys.map(k => D[k]||0), backgroundColor: keys.map(k => saCo(SA_LC[k]||'#64748b', .85)), borderRadius:3, borderSkipped:false }] },
     options: saChartOpts(),
   });
+}
+
+/* ── 回頭客明細 Modal ── */
+let saRtFilter = 'all';
+function saShowReturningDetail() {
+  const detail = saData.returning.detail || [];
+  if (!detail.length) return;
+  saRtFilter = 'all';
+
+  const modal = document.createElement('div');
+  modal.id = 'sa-rt-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:flex;align-items:center;justify-content:center;padding:14px;backdrop-filter:blur(2px)';
+  modal.innerHTML = `
+    <div style="background:var(--bg1);border:1px solid var(--bd2);border-radius:12px;max-width:760px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--tx)">回頭客明細</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px"><span id="sa-rt-modal-count">${detail.length}</span> 筆記錄 ｜ 依次數→團費降冪排序</div>
+        </div>
+        <button onclick="document.getElementById('sa-rt-modal').remove()" style="background:none;border:none;color:var(--tx3);font-size:22px;cursor:pointer;padding:0 4px;line-height:1">✕</button>
+      </div>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--bd);display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0">
+        <button class="dcr-fbtn active" data-rt="all"  onclick="saRtFilterDetail('all',this)">全部</button>
+        <button class="dcr-fbtn"        data-rt="野澤" onclick="saRtFilterDetail('野澤',this)">野澤</button>
+        <button class="dcr-fbtn"        data-rt="斑尾" onclick="saRtFilterDetail('斑尾',this)">斑尾</button>
+        <button class="dcr-fbtn"        data-rt="湯澤" onclick="saRtFilterDetail('湯澤',this)">湯澤</button>
+        <button class="dcr-fbtn"        data-rt="龍平" onclick="saRtFilterDetail('龍平',this)">龍平</button>
+      </div>
+      <div id="sa-rt-modal-body" style="overflow-y:auto;flex:1;min-height:0"></div>
+    </div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  saRtRenderModal();
+}
+
+function saRtFilterDetail(area, btn) {
+  saRtFilter = area;
+  btn.parentElement.querySelectorAll('.dcr-fbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  saRtRenderModal();
+}
+
+function saRtRenderModal() {
+  const body = document.getElementById('sa-rt-modal-body');
+  const cntEl = document.getElementById('sa-rt-modal-count');
+  if (!body) return;
+  const all = saData.returning.detail || [];
+  const list = saRtFilter === 'all' ? all : all.filter(r => r.area === saRtFilter);
+  if (cntEl) cntEl.textContent = list.length;
+
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead style="position:sticky;top:0;background:var(--bg2);z-index:1">
+      <tr>
+        <th style="text-align:left;padding:9px 12px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">雪場</th>
+        <th style="text-align:left;padding:9px 8px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">姓名</th>
+        <th style="text-align:center;padding:9px 6px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">類型</th>
+        <th style="text-align:right;padding:9px 10px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">團費</th>
+        <th style="text-align:center;padding:9px 8px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">出發日</th>
+        <th style="text-align:center;padding:9px 8px;color:var(--tx3);font-size:10.5px;font-weight:600;border-bottom:1px solid var(--bd)">次數</th>
+      </tr>
+    </thead>
+    <tbody>`;
+  for (const r of list) {
+    const skiColor = r.ski === '單板' ? '#06b6d4' : r.ski === '雙板' ? '#f59e0b' : 'var(--tx3)';
+    const depShort = r.dep ? r.dep.replace(/^20/, '').replace(/^\d{4}\//, m => m.slice(2)) : '—';
+    html += `<tr style="border-bottom:1px solid var(--bd)">
+      <td style="padding:8px 12px;color:${SA_AC[r.area] || 'var(--tx)'};font-weight:500">${r.area}</td>
+      <td style="padding:8px 8px;color:var(--tx)">${r.name}</td>
+      <td style="padding:8px 6px;text-align:center;color:${skiColor};font-weight:500;font-size:11px">${r.ski || '—'}</td>
+      <td style="padding:8px 10px;text-align:right;font-family:monospace;color:var(--tx)">${r.fee.toLocaleString()}</td>
+      <td style="padding:8px 8px;text-align:center;font-size:11px;color:var(--tx3);font-family:monospace">${depShort}</td>
+      <td style="padding:8px 8px;text-align:center"><span style="background:rgba(240,160,96,.18);color:#f0a060;font-weight:700;padding:2px 8px;border-radius:10px;font-size:11px;font-family:monospace">${r.visits}</span></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  if (!list.length) html = '<div style="padding:40px;text-align:center;color:var(--tx3);font-size:12px">無資料</div>';
+  body.innerHTML = html;
 }
 
 /* ── 加購 ── */

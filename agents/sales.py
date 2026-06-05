@@ -336,10 +336,11 @@ def compute_addons(df):
 
 def compute_returning(current_df, historical_dfs):
     """
-    歷年資料聚合：每位旅客在歷年出現過幾次（年度去重）
+    歷年資料聚合：每位旅客在歷年出現過幾年（年度去重）
     本季旅客若 key 命中歷年，視為回頭客
+    回傳含：count, by_area, times_dist, detail（所有回頭客當季每筆記錄）
     """
-    historical_year_count = defaultdict(int)   # key → 來過幾年
+    historical_year_count = defaultdict(int)
 
     for hist_df in historical_dfs:
         seen_this_year = set()
@@ -351,40 +352,62 @@ def compute_returning(current_df, historical_dfs):
 
     current_df = current_df.copy()
     current_df['_area'] = current_df['團號'].apply(get_area)
+    current_df['_fee']  = pd.to_numeric(
+        current_df['團費'].astype(str).str.replace(',', '').str.replace(' ', ''),
+        errors='coerce',
+    )
 
     returning_count = 0
     by_area = defaultdict(int)
     times_dist = defaultdict(int)
     seen_visitors_this_season = set()
+    seen_returning_visitors   = set()
+    detail = []
 
     for _, row in current_df.iterrows():
         keys = customer_keys(row)
         if not keys: continue
-
-        # 同人在本季可能多筆，這裡按人計算（去重）
         primary_key = keys[0]
-        if primary_key in seen_visitors_this_season: continue
-        seen_visitors_this_season.add(primary_key)
 
         matched_years = 0
         for k in keys:
             matched_years = max(matched_years, historical_year_count.get(k, 0))
 
+        # 本季不重複旅客（同人多筆只算一次）
+        seen_visitors_this_season.add(primary_key)
+
         if matched_years > 0:
-            returning_count += 1
-            area = row.get('_area', '')
-            if area: by_area[area] += 1
-            total_visits = matched_years + 1   # 含本季
-            label = '4+' if total_visits >= 4 else str(total_visits)
-            times_dist[label] += 1
+            # 回頭客旅客計數（同人只算一次）
+            if primary_key not in seen_returning_visitors:
+                seen_returning_visitors.add(primary_key)
+                returning_count += 1
+                area = row.get('_area', '')
+                if area: by_area[area] += 1
+                total_visits = matched_years + 1
+                label = '4+' if total_visits >= 4 else str(total_visits)
+                times_dist[label] += 1
+
+            # 明細列表（每筆都列）
+            detail.append({
+                'name':   str(row.get('中文姓名', '') or '').strip(),
+                'area':   row.get('_area', '') or '未派團',
+                'ski':    str(row.get('滑雪類別', '') or '').strip(),
+                'fee':    int(row['_fee']) if pd.notna(row['_fee']) else 0,
+                'dep':    str(row.get('出發日期', '') or '').strip(),
+                'visits': matched_years + 1,   # 含本季是第幾次來
+            })
 
     total_unique = len(seen_visitors_this_season)
+    # 明細依次數降冪、再依團費降冪排序（最忠實 + 最貴的在前）
+    detail.sort(key=lambda r: (-r['visits'], -r['fee']))
+
     return {
         'count': returning_count,
         'total_unique': total_unique,
         'pct': round(returning_count / total_unique * 100, 1) if total_unique else 0,
         'by_area': dict(by_area),
         'times_dist': dict(times_dist),
+        'detail': detail,
     }
 
 
