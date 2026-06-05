@@ -2406,6 +2406,380 @@ function jumpMyToday() {
   }
   renderMyCalendar();
 }
+
+/* ════════════════════════════════
+   每日教練需求
+════════════════════════════════ */
+const DCR_AREAS    = ['野澤', '斑尾', '湯澤', '龍平'];
+const DCR_PURE     = new Set(['野澤純課', '斑尾純課', '湯澤純課']);
+const DCR_AREA_MAP = {
+  '野澤純課': '野澤', '斑尾純課': '斑尾', '湯澤純課': '湯澤',
+  '野澤': '野澤', '斑尾': '斑尾', '龍平': '龍平',
+};
+const DCR_CAPS = {'野澤':14, '斑尾':8, '湯澤':10, '龍平':10};
+/* 顏色閾值：≤max 套該顏色；最後一段 999 = red */
+const DCR_THR = {
+  '野澤': [{max:7,c:'green'},  {max:10,c:'yellow'}, {max:13,c:'orange'}, {max:999,c:'red'}],
+  '斑尾': [{max:4,c:'green'},  {max:6,c:'yellow'},  {max:7,c:'orange'},  {max:999,c:'red'}],
+  '湯澤': [{max:5,c:'green'},  {max:7,c:'yellow'},  {max:9,c:'orange'},  {max:999,c:'red'}],
+  '龍平': [{max:5,c:'green'},  {max:7,c:'yellow'},  {max:9,c:'orange'},  {max:999,c:'red'}],
+};
+
+let dcrComputedRows = null;   // [{date,wd,areas,total_jp,total_kr,total}]
+let dcrView         = 'table';
+let dcrFilter       = 'all';
+
+/* ── 計算工具 ── */
+function dcrLvGroup(lv) {
+  lv = String(lv || '').toLowerCase().trim();
+  if (!lv || lv === 'lv0') return 'g0';
+  const m = lv.match(/(\d+)/);
+  const n = m ? parseInt(m[1]) : 0;
+  return n <= 2 ? 'g12' : 'g345';
+}
+
+function dcrParseCoachDays(tiansu) {
+  if (!tiansu) return 2;
+  const s = String(tiansu).trim();
+  const m = s.match(/(\d+)/);
+  if (!m) return 2;
+  const n = parseInt(m[1]);
+  if (s.includes('無') && !s.includes('含')) return 2;
+  return n || 2;
+}
+
+function dcrParseDate(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  const p = s.split('/');
+  if (p.length !== 3) return null;
+  let y = parseInt(p[0]);
+  if (isNaN(y)) return null;
+  if (y < 100) y += 2000;
+  const m = parseInt(p[1]);
+  const d = parseInt(p[2]);
+  if (isNaN(m) || isNaN(d)) return null;
+  const dt = new Date(y, m-1, d);
+  if (isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function dcrFmtDate(dt) {
+  return `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}`;
+}
+
+function dcrColor(area, n) {
+  if (n === 0) return 'none';
+  for (const t of DCR_THR[area]) {
+    if (n <= t.max) return t.c;
+  }
+  return 'red';
+}
+
+/* ── 主計算 ── */
+function dcrCalcDaily(courseRows) {
+  const daily = {};
+  const ensure = (ds, area) => {
+    if (!daily[ds]) daily[ds] = {};
+    if (!daily[ds][area]) daily[ds][area] = {pureOrders:new Set(), g0:0, g12:0, g345:0};
+    return daily[ds][area];
+  };
+
+  for (const row of courseRows) {
+    if (!Array.isArray(row) || row.length < 17) continue;
+    if (cIsSep(row)) continue;
+
+    /* 訂編必須是純數字 → 跳過表頭/空白列 */
+    const ono = String(row[6] || '').trim();
+    if (!/^\d+$/.test(ono)) continue;
+
+    /* 項目1 優先（避免被 CHECKIN 替換成旅館名）*/
+    let item = String(row[28] || '').trim();
+    if (!item) item = String(row[1] || '').trim();
+    if (!item || item === '其他') continue;
+
+    const area = DCR_AREA_MAP[item];
+    if (!area) continue;
+
+    const dep = dcrParseDate(row[2]);
+    if (!dep) continue;
+
+    const lv     = row[16] || 'lv0';
+    const grp    = dcrLvGroup(lv);
+    const tiansu = String(row[4] || '').trim();
+    const days   = dcrParseCoachDays(tiansu);
+
+    const isPure = DCR_PURE.has(item);
+
+    /* 出發後 1 ~ days 天，每天都產生 1 個 slot */
+    for (let d = 1; d <= days; d++) {
+      const dt = new Date(dep);
+      dt.setDate(dt.getDate() + d);
+      const ds   = dcrFmtDate(dt);
+      const slot = ensure(ds, area);
+      if (isPure) slot.pureOrders.add(ono);
+      else        slot[grp]++;
+    }
+  }
+
+  return daily;
+}
+
+function dcrCalcCoaches(d) {
+  const g0   = d.g0   || 0;
+  const g12  = d.g12  || 0;
+  const g345 = d.g345 || 0;
+  const pure = d.pureOrders ? d.pureOrders.size : 0;
+  const team =
+    (g0   > 0 ? Math.ceil(g0  /6) : 0) +
+    (g12  > 0 ? Math.ceil(g12 /6) : 0) +
+    (g345 > 0 ? Math.ceil(g345/6) : 0);
+  return { coaches: pure + team, pure, team, g0, g12, g345 };
+}
+
+function dcrBuildRows(daily) {
+  const WDAY = ['日','一','二','三','四','五','六'];
+
+  /* 找出資料的最小/最大日期 */
+  let minD = null, maxD = null;
+  for (const ds in daily) {
+    const p = ds.split('/');
+    const d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+    if (!minD || d < minD) minD = d;
+    if (!maxD || d > maxD) maxD = d;
+  }
+  if (!minD) return [];
+
+  const rows = [];
+  const cur = new Date(minD);
+  while (cur <= maxD) {
+    const ds = dcrFmtDate(cur);
+    const wd = WDAY[cur.getDay()];
+    const row = { date: ds, wd, areas: {}, total_jp: 0, total_kr: 0, total: 0 };
+    for (const area of DCR_AREAS) {
+      const d = (daily[ds] && daily[ds][area]) || {};
+      const r = dcrCalcCoaches(d);
+      const color = dcrColor(area, r.coaches);
+      row.areas[area] = { c: r.coaches, pure: r.pure, team: r.team, color, cap: DCR_CAPS[area] };
+      if (area === '龍平') row.total_kr += r.coaches;
+      else                 row.total_jp += r.coaches;
+      row.total += r.coaches;
+    }
+    rows.push(row);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return rows;
+}
+
+/* ── UI ── */
+async function renderDailyCoachReq() {
+  const pc = document.getElementById('page-content');
+  pc.className = 'dcr-page';
+  pc.innerHTML = `
+    <div class="dcr-head">
+      <h1 style="font-size:20px;font-weight:700;margin-bottom:2px">每日教練需求</h1>
+      <p style="font-size:12px;color:var(--tx2)">依出發日期計算各雪場每天需要的教練人數</p>
+    </div>
+    <div class="dcr-tabs">
+      <button id="dcrv-table" class="dcr-tab active" onclick="dcrSetView('table',this)">📋 列表</button>
+      <button id="dcrv-cal"   class="dcr-tab"        onclick="dcrSetView('calendar',this)">📅 月曆</button>
+    </div>
+    <div class="dcr-legend">
+      <span style="font-size:11px;color:var(--tx3);margin-right:4px">負荷量級：</span>
+      <div class="dcr-leg-item"><div class="dcr-leg-dot" style="background:#10b981"></div>充足</div>
+      <div class="dcr-leg-item"><div class="dcr-leg-dot" style="background:#f59e0b"></div>注意</div>
+      <div class="dcr-leg-item"><div class="dcr-leg-dot" style="background:#f97316"></div>緊張</div>
+      <div class="dcr-leg-item"><div class="dcr-leg-dot" style="background:#ef4444"></div>超載</div>
+      <div class="dcr-leg-cap">上限：野澤 14 ｜ 斑尾 8 ｜ 湯澤 10 ｜ 龍平 10</div>
+    </div>
+    <div class="dcr-filters">
+      <button class="dcr-fbtn active" onclick="dcrSetFilter('all',this)">全部</button>
+      <button class="dcr-fbtn"        onclick="dcrSetFilter('has',this)">有課日</button>
+      <button class="dcr-fbtn"        onclick="dcrSetFilter('warn',this)">注意以上</button>
+      <button class="dcr-fbtn"        onclick="dcrSetFilter('野澤',this)">野澤</button>
+      <button class="dcr-fbtn"        onclick="dcrSetFilter('斑尾',this)">斑尾</button>
+      <button class="dcr-fbtn"        onclick="dcrSetFilter('湯澤',this)">湯澤</button>
+      <button class="dcr-fbtn"        onclick="dcrSetFilter('龍平',this)">龍平</button>
+    </div>
+    <div id="dcr-content"><div class="loading"><div class="spin"></div> 載入中</div></div>`;
+
+  /* 重用 cRawRows 課程安排快取（沒有就抓）*/
+  if (!cRawRows) await loadCourse();
+  if (!cRawRows) {
+    document.getElementById('dcr-content').innerHTML = '<div style="padding:40px;text-align:center;color:var(--tx3)">無法載入課程安排資料</div>';
+    return;
+  }
+
+  const daily = dcrCalcDaily(cRawRows);
+  dcrComputedRows = dcrBuildRows(daily);
+  dcrRender();
+}
+
+function dcrSetView(v, btn) {
+  dcrView = v;
+  document.querySelectorAll('.dcr-tabs .dcr-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  dcrRender();
+}
+
+function dcrSetFilter(f, btn) {
+  dcrFilter = f;
+  document.querySelectorAll('.dcr-filters .dcr-fbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  dcrRender();
+}
+
+function dcrShouldShow(row) {
+  if (dcrFilter === 'all')  return true;
+  if (dcrFilter === 'has')  return row.total > 0;
+  if (dcrFilter === 'warn') return DCR_AREAS.some(a => {
+    const c = row.areas[a].color;
+    return c === 'yellow' || c === 'orange' || c === 'red';
+  });
+  if (DCR_AREAS.includes(dcrFilter)) return (row.areas[dcrFilter].c || 0) > 0;
+  return true;
+}
+
+function dcrRender() {
+  if (dcrView === 'table') dcrRenderTable();
+  else                     dcrRenderCalendar();
+}
+
+function dcrRenderTable() {
+  const el = document.getElementById('dcr-content');
+  if (!dcrComputedRows) return;
+
+  let html = `<div class="dcr-tbl-wrap"><table class="dcr-tbl"><thead>
+    <tr>
+      <th rowspan="2" style="text-align:left;padding-left:14px">日期</th>
+      <th rowspan="2">曜</th>
+      <th style="border-bottom:2px solid #ffffff">野澤</th>
+      <th style="border-bottom:2px solid #7ec8f5">斑尾</th>
+      <th style="border-bottom:2px solid #ffb347">湯澤</th>
+      <th style="border-bottom:2px solid #c8864a">龍平</th>
+      <th rowspan="2">日本<br><span style="font-size:9px;color:var(--tx3);font-weight:400">野+斑+湯</span></th>
+      <th rowspan="2">韓國<br><span style="font-size:9px;color:var(--tx3);font-weight:400">龍平</span></th>
+      <th rowspan="2">合計</th>
+    </tr>
+    <tr><th></th><th></th><th></th><th></th></tr>
+  </thead><tbody>`;
+
+  let prevMonth = '';
+  let visible = 0;
+  for (const row of dcrComputedRows) {
+    if (!dcrShouldShow(row)) continue;
+
+    const month = row.date.slice(0, 7);   // YYYY/MM
+    if (month !== prevMonth) {
+      html += `<tr class="dcr-month-hdr"><td colspan="9">${month}</td></tr>`;
+      prevMonth = month;
+    }
+
+    const isWE = (row.wd === '六' || row.wd === '日');
+    let cls = '';
+    if (row.total > 0) cls += 'dcr-has-data ';
+    if (isWE)          cls += 'dcr-weekend';
+
+    let cols = '';
+    for (const a of DCR_AREAS) {
+      const d = row.areas[a];
+      if (!d.c) {
+        cols += `<td><div class="dcr-badge dcr-cb-none">—</div></td>`;
+      } else {
+        const tip = `純${d.pure} 團${d.team} / 上限${d.cap}`;
+        cols += `<td><div class="dcr-badge dcr-cb-${d.color}" title="${tip}">${d.c}</div></td>`;
+      }
+    }
+
+    const jpWarn = row.total_jp >= 25 ? 'warn-r' : row.total_jp >= 20 ? 'warn-o' : row.total_jp >= 15 ? 'warn-y' : '';
+
+    html += `<tr class="${cls.trim()}">
+      <td class="dcr-date">${row.date.slice(5)}</td>
+      <td class="dcr-wd${isWE?' we':''}">${row.wd}</td>
+      ${cols}
+      <td><span class="dcr-total-jp ${jpWarn}">${row.total_jp || '—'}</span></td>
+      <td><span class="dcr-total-kr">${row.total_kr || '—'}</span></td>
+      <td><span class="dcr-total">${row.total || '—'}</span></td>
+    </tr>`;
+    visible++;
+  }
+  html += '</tbody></table></div>';
+
+  if (!visible) html = '<div style="padding:40px;text-align:center;color:var(--tx3)">無符合條件的資料</div>';
+  el.innerHTML = html;
+}
+
+function dcrRenderCalendar() {
+  const el = document.getElementById('dcr-content');
+  if (!dcrComputedRows) return;
+
+  /* 依月份分組 */
+  const months = {};
+  for (const row of dcrComputedRows) {
+    if (!dcrShouldShow(row)) continue;
+    const m = row.date.slice(0, 7);
+    if (!months[m]) months[m] = [];
+    months[m].push(row);
+  }
+
+  const COLOR_MAP = {'green':'#10b981','yellow':'#f59e0b','orange':'#f97316','red':'#ef4444','none':'#64748b'};
+  const COLOR_BG  = {'green':'16,185,129','yellow':'245,158,11','orange':'249,115,22','red':'239,68,68','none':'100,116,139'};
+
+  let html = '<div class="dcr-cal-wrap">';
+  const monthKeys = Object.keys(months).sort();
+  if (!monthKeys.length) html += '<div style="padding:40px;text-align:center;color:var(--tx3)">無符合條件的資料</div>';
+
+  for (const monthKey of monthKeys) {
+    const [y, mo] = monthKey.split('/').map(Number);
+    const firstDay = new Date(y, mo-1, 1).getDay();
+    const dim      = new Date(y, mo, 0).getDate();
+
+    const dayMap = {};
+    months[monthKey].forEach(r => {
+      dayMap[parseInt(r.date.split('/')[2])] = r;
+    });
+
+    html += `<div class="dcr-cal-month">
+      <div class="dcr-cal-title">${monthKey}</div>
+      <div class="dcr-cal-grid">`;
+    ['日','一','二','三','四','五','六'].forEach(d => {
+      html += `<div class="dcr-cal-dow">${d}</div>`;
+    });
+    for (let i = 0; i < firstDay; i++) html += '<div class="dcr-cal-day empty"></div>';
+
+    for (let d = 1; d <= dim; d++) {
+      const row  = dayMap[d];
+      const date = new Date(y, mo-1, d);
+      const dow  = date.getDay();
+      const isW  = (dow === 0 || dow === 6);
+      const hasD = row && row.total > 0;
+
+      let badges = '';
+      if (row) {
+        for (const a of DCR_AREAS) {
+          const dd = row.areas[a];
+          if (!dd || dd.c === 0) continue;
+          const c = dd.color;
+          badges += `<div class="dcr-cal-bdg" style="background:rgba(${COLOR_BG[c]},.12)">
+            <div class="dcr-cal-bdg-dot" style="background:${COLOR_MAP[c]}"></div>
+            <span class="dcr-cal-bdg-area">${a[0]}</span>
+            <span class="dcr-cal-bdg-n" style="color:${COLOR_MAP[c]}">${dd.c}</span>
+          </div>`;
+        }
+      }
+
+      const cls = 'dcr-cal-day' + (isW?' we':'') + (hasD?' has-data':'');
+      html += `<div class="${cls}">
+        <div class="dcr-cal-date${isW?' we':''}">${d}</div>
+        <div class="dcr-cal-badges">${badges}</div>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
 </script>
 </body>
 </html>
