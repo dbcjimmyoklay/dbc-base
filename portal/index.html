@@ -473,6 +473,30 @@ body {
   background:var(--bg3); padding:1px 7px; border-radius:8px;
 }
 
+/* ── 我的班表（日曆） ── */
+.mys-toolbar { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:14px; }
+.mys-nav { background:var(--bg2); color:var(--tx2); border:1px solid var(--bd); border-radius:7px; padding:5px 12px; font-size:14px; cursor:pointer; font-family:inherit; transition:all .15s; }
+.mys-nav:hover { background:var(--bg3); color:var(--tx); }
+.mys-nav:disabled { opacity:.3; cursor:not-allowed; }
+.mys-month { font-size:15px; font-weight:600; min-width:110px; text-align:center; color:var(--tx); }
+.mys-today-btn { font-size:11.5px; padding:4px 10px; border-radius:6px; border:1px solid var(--bd); background:transparent; color:var(--tx3); cursor:pointer; font-family:inherit; }
+.mys-today-btn:hover { color:var(--tx); border-color:var(--bd2); }
+.mys-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.mys-wd { text-align:center; padding:7px 0; font-size:11px; font-weight:600; color:var(--tx2); }
+.mys-wd.we { color:#f0c060; }
+.mys-day { border:1px solid var(--bd); border-radius:7px; padding:5px 4px; min-height:64px; display:flex; flex-direction:column; background:var(--bg1); }
+.mys-day.today { border-color:var(--ac); background:rgba(26,111,181,.18); }
+.mys-day.empty { background:transparent; border-color:transparent; }
+.mys-day-num { font-size:11px; color:var(--tx2); font-weight:600; }
+.mys-day-num.we { color:#f0c060; }
+.mys-day-val { font-size:11.5px; color:var(--tx); margin-top:4px; line-height:1.3; word-break:break-all; flex:1; }
+.mys-day-val.off { color:var(--tx3); font-style:italic; }
+@media (max-width:480px) {
+  .mys-day { min-height:54px; padding:4px 2px; }
+  .mys-day-num { font-size:10px; }
+  .mys-day-val { font-size:10.5px; }
+}
+
 /* ── 教練班表 ── */
 .cs-page { display:flex; flex-direction:column; height:calc(100dvh - var(--top-h)); overflow:hidden; padding:0; }
 .cs-toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--bd); flex-shrink:0; font-size:11.5px; color:var(--tx3); }
@@ -769,6 +793,7 @@ function go(page) {
   if (page === '送客單－斑尾') { renderCheckout('madarao');   return; }
   if (page === '送客單－龍平') { renderCheckout('yongpyong'); return; }
   if (page === '教練班表')    { renderCoach();              return; }
+  if (page === '我的班表')    { renderMySchedule();         return; }
 
   const pc = document.getElementById('page-content');
   pc.className = 'page';
@@ -1915,7 +1940,7 @@ function csParseDate(s) {
   if (!y) y = (m >= CS_SEASON_START) ? 2026 : 2027;
   const dt = new Date(y, m-1, d);
   if (isNaN(dt.getTime())) return null;
-  return { month: m, day: d, wday: CS_WDAY[dt.getDay()], dispDate: `${m}/${d}` };
+  return { year: y, month: m, day: d, wday: CS_WDAY[dt.getDay()], dispDate: `${m}/${d}` };
 }
 
 /* 估算文字寬度：英數 7px、中文/其他 12px（小字型）*/
@@ -2048,6 +2073,182 @@ function renderCSGrid() {
   }
 
   body.innerHTML = html;
+}
+
+/* ════════════════════════════════
+   MY SCHEDULE（我的班表 - 日曆模式）
+════════════════════════════════ */
+let myScheduleMap    = {};   // {"2026-12-26": "野1", ...}
+let myScheduleMonths = [];   // ["2026-12", "2027-1", ...]
+let myScheduleMonth  = null;
+
+async function renderMySchedule() {
+  const pc = document.getElementById('page-content');
+  pc.className = 'page';
+  const coachName = currentUser?.coachName || '';
+
+  if (!coachName) {
+    pc.innerHTML = `
+      <div class="page-header"><h1>我的班表</h1></div>
+      <div class="wip">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div class="wip-title">尚未綁定教練名稱</div>
+        <p style="font-size:12px;line-height:1.7">請聯絡管理員，<br>在「使用者清單」第 H 欄填上你對應的教練名稱<br>（需與教練班表上的名字完全一致）</p>
+      </div>`;
+    return;
+  }
+
+  pc.innerHTML = `
+    <div class="page-header">
+      <h1>我的班表</h1>
+      <p>${coachName}</p>
+    </div>
+    <div class="mys-toolbar">
+      <button id="mys-prev" class="mys-nav">‹</button>
+      <div id="mys-month" class="mys-month">載入中</div>
+      <button id="mys-next" class="mys-nav">›</button>
+      <button id="mys-today" class="mys-today-btn">本月</button>
+    </div>
+    <div id="mys-cal"><div class="loading"><div class="spin"></div> 載入中</div></div>`;
+
+  /* 拉取教練班表資料 */
+  if (!csRawRows) await loadCoach();
+  if (!csRawRows) {
+    document.getElementById('mys-cal').innerHTML = `<div style="padding:40px;text-align:center;color:var(--tx3)">無法載入班表資料</div>`;
+    return;
+  }
+
+  buildMyScheduleMap(coachName);
+
+  if (!myScheduleMonths.length) {
+    document.getElementById('mys-cal').innerHTML = `
+      <div style="padding:40px;text-align:center;color:var(--tx3);line-height:2">
+        找不到教練「${coachName}」的班表<br>
+        <span style="font-size:11px">請確認「使用者清單」設定的教練名稱與班表完全一致（大小寫、空格都要一樣）</span>
+      </div>`;
+    return;
+  }
+
+  renderMyCalendar();
+
+  document.getElementById('mys-prev').onclick  = () => navMyMonth(-1);
+  document.getElementById('mys-next').onclick  = () => navMyMonth(1);
+  document.getElementById('mys-today').onclick = () => jumpMyToday();
+}
+
+function buildMyScheduleMap(coachName) {
+  myScheduleMap    = {};
+  myScheduleMonths = [];
+  const rows = csRawRows;
+  if (!rows || rows.length < 2) return;
+
+  /* 找到該教練的列 */
+  let myRow = null;
+  for (let r = 3; r < rows.length; r++) {
+    if (String(rows[r] && rows[r][0] || '').trim() === coachName) {
+      myRow = rows[r];
+      break;
+    }
+  }
+  if (!myRow) return;
+
+  const dateRow = rows[1];
+  const monthSet = new Set();
+  for (let c = 2; c < dateRow.length; c++) {
+    const dateStr = String(dateRow[c] || '').trim();
+    if (!dateStr) continue;
+    const p = csParseDate(dateStr);
+    if (!p) continue;
+    const ymKey  = `${p.year}-${p.month}`;
+    const dayKey = `${p.year}-${p.month}-${p.day}`;
+    monthSet.add(ymKey);
+    myScheduleMap[dayKey] = String(myRow[c] || '').trim();
+  }
+
+  /* 月份排序（YYYY-M 字串需自然數字排序）*/
+  myScheduleMonths = Array.from(monthSet).sort((a, b) => {
+    const [ay, am] = a.split('-').map(Number);
+    const [by, bm] = b.split('-').map(Number);
+    return ay !== by ? ay - by : am - bm;
+  });
+
+  /* 預設月份：今天的月，若無則第一個有資料的月 */
+  const t = new Date();
+  const curKey = `${t.getFullYear()}-${t.getMonth()+1}`;
+  myScheduleMonth = myScheduleMonths.includes(curKey)
+    ? curKey
+    : myScheduleMonths[0];
+}
+
+function renderMyCalendar() {
+  const cal = document.getElementById('mys-cal');
+  const lbl = document.getElementById('mys-month');
+  if (!cal || !myScheduleMonth) return;
+
+  const [yStr, mStr] = myScheduleMonth.split('-');
+  const year  = parseInt(yStr);
+  const month = parseInt(mStr);
+
+  if (lbl) lbl.textContent = `${year}年 ${month}月`;
+
+  /* 啟用/停用 prev/next */
+  const idx = myScheduleMonths.indexOf(myScheduleMonth);
+  const prevBtn = document.getElementById('mys-prev');
+  const nextBtn = document.getElementById('mys-next');
+  if (prevBtn) prevBtn.disabled = idx <= 0;
+  if (nextBtn) nextBtn.disabled = idx >= myScheduleMonths.length - 1;
+
+  const firstWday    = new Date(year, month-1, 1).getDay();
+  const daysInMonth  = new Date(year, month, 0).getDate();
+  const today        = new Date();
+  const isCurMonth   = (today.getFullYear() === year && (today.getMonth()+1) === month);
+
+  let html = '';
+  /* 星期表頭 */
+  ['日','一','二','三','四','五','六'].forEach((wd, i) => {
+    const we = (i === 0 || i === 6) ? ' we' : '';
+    html += `<div class="mys-wd${we}">${wd}</div>`;
+  });
+
+  /* 前置空白 */
+  for (let i = 0; i < firstWday; i++) html += '<div class="mys-day empty"></div>';
+
+  /* 日期格 */
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key   = `${year}-${month}-${d}`;
+    const val   = myScheduleMap[key] || '';
+    const wday  = new Date(year, month-1, d).getDay();
+    const we    = (wday === 0 || wday === 6) ? ' we' : '';
+    const isToday = isCurMonth && today.getDate() === d;
+    const isOff   = ['休','事務','病','定休','事假'].includes(val);
+    html += `<div class="mys-day${isToday ? ' today' : ''}">
+      <div class="mys-day-num${we}">${d}</div>
+      <div class="mys-day-val${isOff ? ' off' : ''}" title="${val}">${val}</div>
+    </div>`;
+  }
+
+  cal.innerHTML = html;
+}
+
+function navMyMonth(dir) {
+  const idx = myScheduleMonths.indexOf(myScheduleMonth);
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= myScheduleMonths.length) return;
+  myScheduleMonth = myScheduleMonths[newIdx];
+  renderMyCalendar();
+}
+
+function jumpMyToday() {
+  const t = new Date();
+  const curKey = `${t.getFullYear()}-${t.getMonth()+1}`;
+  if (myScheduleMonths.includes(curKey)) {
+    myScheduleMonth = curKey;
+  } else {
+    myScheduleMonth = myScheduleMonths[0];
+  }
+  renderMyCalendar();
 }
 </script>
 </body>
