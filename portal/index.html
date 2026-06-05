@@ -490,19 +490,19 @@ body {
 .dcr-fbtn.active { color:#60b3f4; border-color:var(--ac); background:rgba(26,111,181,.15); }
 
 /* 列表 */
-.dcr-tbl-wrap { border:1px solid var(--bd); border-radius:8px; overflow:auto; max-height:calc(100dvh - 280px); background:var(--bg1); }
-.dcr-tbl { width:100%; border-collapse:collapse; min-width:540px; }
-.dcr-tbl thead th { background:#000c1c; padding:9px 6px; text-align:center; font-size:11.5px; color:var(--tx2); font-weight:600; border-bottom:1px solid var(--bd); position:sticky; top:0; z-index:5; white-space:nowrap; }
+.dcr-tbl-wrap { border:1px solid var(--bd); border-radius:8px; overflow-y:auto; overflow-x:hidden; max-height:calc(100dvh - 280px); background:var(--bg1); }
+.dcr-tbl { width:100%; border-collapse:collapse; table-layout:fixed; }
+.dcr-tbl thead th { background:#000c1c; padding:9px 2px; text-align:center; font-size:11.5px; color:var(--tx2); font-weight:600; border-bottom:1px solid var(--bd); position:sticky; top:0; z-index:5; white-space:nowrap; }
 .dcr-tbl tbody tr { border-bottom:1px solid var(--bd); }
 .dcr-tbl tbody tr.dcr-has-data { background:rgba(26,111,181,.06); }
 .dcr-tbl tbody tr.dcr-weekend { background:rgba(240,192,96,.04); }
 .dcr-tbl tbody tr.dcr-weekend.dcr-has-data { background:rgba(240,192,96,.07); }
-.dcr-tbl td { padding:8px 6px; text-align:center; font-size:13px; }
-.dcr-tbl td.dcr-date { text-align:left; padding-left:14px; color:var(--tx2); font-size:12px; font-family:monospace; white-space:nowrap; }
+.dcr-tbl td { padding:8px 2px; text-align:center; font-size:13px; }
+.dcr-tbl td.dcr-date { text-align:left; padding-left:10px; color:var(--tx2); font-size:11.5px; font-family:monospace; white-space:nowrap; }
 .dcr-tbl td.dcr-wd { font-size:12px; color:var(--tx3); }
 .dcr-tbl td.dcr-wd.we { color:#f0c060; }
 .dcr-tbl tr.dcr-month-hdr td { background:#001020; color:#60b3f4; font-size:11.5px; font-weight:600; text-align:left; padding:7px 14px; border-bottom:1px solid var(--bd2); }
-.dcr-badge { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:28px; border-radius:6px; font-weight:700; font-size:14px; padding:0 8px; font-family:monospace; }
+.dcr-badge { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:26px; border-radius:6px; font-weight:700; font-size:13px; padding:0 6px; font-family:monospace; }
 .dcr-cb-green  { background:rgba(16,185,129,.18); color:#10b981; }
 .dcr-cb-yellow { background:rgba(245,158,11,.18); color:#f59e0b; }
 .dcr-cb-orange { background:rgba(249,115,22,.18); color:#f97316; }
@@ -522,7 +522,7 @@ body {
 .dcr-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); }
 .dcr-cal-dow { padding:7px 4px; text-align:center; font-size:10.5px; color:var(--tx3); border-bottom:1px solid var(--bd); border-right:1px solid var(--bd); background:#000c1c; }
 .dcr-cal-dow:nth-child(7n) { border-right:none; }
-.dcr-cal-day { border-right:1px solid var(--bd); border-bottom:1px solid var(--bd); min-height:82px; padding:5px 4px; position:relative; background:var(--bg1); }
+.dcr-cal-day { border-right:1px solid var(--bd); border-bottom:1px solid var(--bd); min-height:88px; padding:5px 3px; position:relative; background:var(--bg1); overflow:hidden; }
 .dcr-cal-day:nth-child(7n) { border-right:none; }
 .dcr-cal-day.empty { background:transparent; }
 .dcr-cal-day.we { background:rgba(240,192,96,.04); }
@@ -2596,10 +2596,6 @@ async function renderDailyCoachReq() {
       <button class="dcr-fbtn active" onclick="dcrSetFilter('all',this)">全部</button>
       <button class="dcr-fbtn"        onclick="dcrSetFilter('has',this)">有課日</button>
       <button class="dcr-fbtn"        onclick="dcrSetFilter('warn',this)">注意以上</button>
-      <button class="dcr-fbtn"        onclick="dcrSetFilter('野澤',this)">野澤</button>
-      <button class="dcr-fbtn"        onclick="dcrSetFilter('斑尾',this)">斑尾</button>
-      <button class="dcr-fbtn"        onclick="dcrSetFilter('湯澤',this)">湯澤</button>
-      <button class="dcr-fbtn"        onclick="dcrSetFilter('龍平',this)">龍平</button>
     </div>
     <div id="dcr-content"><div class="loading"><div class="spin"></div> 載入中</div></div>`;
 
@@ -2649,9 +2645,16 @@ function dcrRenderTable() {
   const el = document.getElementById('dcr-content');
   if (!dcrComputedRows) return;
 
-  let html = `<div class="dcr-tbl-wrap"><table class="dcr-tbl"><thead>
+  let html = `<div class="dcr-tbl-wrap"><table class="dcr-tbl">
+    <colgroup>
+      <col style="width:15%">
+      <col style="width:7%">
+      <col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:9%">
+      <col style="width:12%"><col style="width:12%"><col style="width:10%">
+    </colgroup>
+    <thead>
     <tr>
-      <th rowspan="2" style="text-align:left;padding-left:14px">日期</th>
+      <th rowspan="2" style="text-align:left;padding-left:10px">日期</th>
       <th rowspan="2">曜</th>
       <th style="border-bottom:2px solid #ffffff">野澤</th>
       <th style="border-bottom:2px solid #7ec8f5">斑尾</th>
