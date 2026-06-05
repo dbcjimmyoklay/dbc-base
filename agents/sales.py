@@ -64,7 +64,9 @@ def find_xlsx_files():
 
 
 def load_xlsx(path):
-    """同 cleaner 邏輯：第2列為標題、第3列起為資料、重複欄位加 _N"""
+    """同 cleaner 邏輯：第2列為標題、第3列起為資料、重複欄位加 _N
+    並對「團號」做 forward-fill（科威格式：同訂單只有第一人有團號）
+    """
     df_raw = pd.read_excel(path, header=None)
     headers = df_raw.iloc[1].tolist()
     seen = {}
@@ -82,6 +84,8 @@ def load_xlsx(path):
     df = df.reset_index(drop=True)
     if '團號' in df.columns:
         df = df[df['團號'] != '數量小計'].copy()
+    # 同訂單第 2 人開始 團號 空白 → 用訂單編號補齊
+    df = forward_fill_group_by_order(df)
     return df
 
 
@@ -90,15 +94,21 @@ def load_xlsx(path):
 # ═══════════════════════════════════════════
 
 def get_area(g):
+    """團號 → 雪場（與 config.py ITEM_RULES 一致）
+    ZN=野澤純課, ZB=斑尾純課, ZY=湯澤純課,
+    YS=龍平,  NT=野澤,  BT=斑尾,
+    N=野澤,  B=斑尾
+    """
     if pd.isna(g): return ''
     s = str(g)
     if 'ZN' in s: return '野澤'
     if 'ZB' in s: return '斑尾'
     if 'ZY' in s: return '湯澤'
-    if 'YS' in s or 'NT' in s: return '龍平'
+    if 'YS' in s: return '龍平'
+    if 'NT' in s: return '野澤'
     if 'BT' in s: return '斑尾'
-    if 'N' in s:  return '野澤'
-    if 'B' in s:  return '斑尾'
+    if 'N'  in s: return '野澤'
+    if 'B'  in s: return '斑尾'
     return ''
 
 
@@ -106,6 +116,31 @@ def is_pure(g):
     if pd.isna(g): return False
     s = str(g)
     return 'ZN' in s or 'ZB' in s or 'ZY' in s
+
+
+def forward_fill_group_by_order(df):
+    """科威格式：同訂單第 2 人開始團號是空白 → 用訂單編號補齊
+    回傳新的 DataFrame，'團號' 欄為 forward-filled 版本
+    """
+    if '訂單編號' not in df.columns or '團號' not in df.columns:
+        return df
+    df = df.copy()
+    # 建立 訂單編號 → 第一個非空團號 的對照
+    order_to_group = {}
+    for _, row in df.iterrows():
+        order = str(row.get('訂單編號', '') or '').strip()
+        group = row.get('團號', None)
+        if order and order != 'nan' and order not in order_to_group:
+            if pd.notna(group) and str(group).strip():
+                order_to_group[order] = group
+    # 補齊
+    def fill(row):
+        if pd.notna(row['團號']) and str(row['團號']).strip():
+            return row['團號']
+        order = str(row.get('訂單編號', '') or '').strip()
+        return order_to_group.get(order, row['團號'])
+    df['團號'] = df.apply(fill, axis=1)
+    return df
 
 
 def norm_level(lv):
@@ -161,6 +196,9 @@ def compute_overview(df):
     df = df.copy()
     df['_area'] = df['團號'].apply(get_area)
     df['_pure'] = df['團號'].apply(is_pure)
+
+    # 統計未分團的訂單（團號空白 → 科威尚未派團）
+    unassigned = int((df['_area'] == '').sum())
     df['_fee']  = pd.to_numeric(
         df['團費'].astype(str).str.replace(',', '').str.replace(' ', ''),
         errors='coerce',
@@ -190,6 +228,7 @@ def compute_overview(df):
         'total_revenue': total_revenue,
         'avg_fee':       avg_fee,
         'areas':         areas,
+        'unassigned':    unassigned,
     }
 
 

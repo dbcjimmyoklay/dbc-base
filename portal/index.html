@@ -2930,6 +2930,7 @@ function saRenderDashboard() {
           <div class="v">${saFmt(D.overview.total_revenue)}</div>
           <div class="l">總營收 NT$</div>
           <div style="font-size:10px;color:var(--tx3);margin-top:6px;font-family:monospace">${D.overview.total_orders} 訂單 ｜ 客均 ${D.overview.avg_fee.toLocaleString()}</div>
+          ${D.overview.unassigned > 0 ? `<div style="font-size:10px;color:#f0c060;margin-top:5px">⚠ ${D.overview.unassigned} 人未派團</div>` : ''}
         </div>
       </div>
     </div>
