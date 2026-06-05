@@ -2980,15 +2980,22 @@ function saRenderDashboard() {
     </div>
 
     ${D.yoy ? `
-    <div class="sa-sec">同期對比（vs ${D.yoy.prev_season}）</div>
+    <div class="sa-sec">同期對比</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--tx3)">對比歷年：</span>
+      <div class="sa-tabs" id="sa-yoy-tabs"></div>
+    </div>
+    <div id="sa-yoy-summary" style="font-size:12px;color:var(--tx2);background:var(--bg1);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;margin-bottom:10px;line-height:1.7"></div>
     <div class="sa-g2">
       <div class="sa-card" style="margin-bottom:0">
-        <div class="sa-card-ti"><span class="sa-dot" style="background:#8b5cf6"></span>同檔期累積（雪季同樣 N 天）</div>
-        <div class="sa-cw" style="height:200px"><canvas id="sa-yoyCumC"></canvas></div>
+        <div class="sa-card-ti">
+          <span class="sa-dot" style="background:#8b5cf6"></span>同檔期累積（雪季前 N 天，5/1 起算）
+        </div>
+        <div class="sa-cw" style="height:220px"><canvas id="sa-yoyCumC"></canvas></div>
       </div>
       <div class="sa-card" style="margin-bottom:0">
-        <div class="sa-card-ti"><span class="sa-dot" style="background:#ec4899"></span>同日比（出發日 月/日 對照）</div>
-        <div class="sa-cw" style="height:200px"><canvas id="sa-yoyMdC"></canvas></div>
+        <div class="sa-card-ti"><span class="sa-dot" style="background:#ec4899"></span>同日比（出發 月/日 對照）</div>
+        <div class="sa-cw" style="height:220px"><canvas id="sa-yoyMdC"></canvas></div>
       </div>
     </div>` : ''}
 
@@ -3063,7 +3070,7 @@ function saRenderDashboard() {
   saSetCum('all', document.querySelector('.sa-card .sa-tabs .sa-tab.active'));
   saSetDailyRange('all', null);
   saSetDepRange('all', null);
-  if (D.yoy) { saRenderYoyCum(); saRenderYoyMd(); }
+  if (D.yoy) saInitYoy();
   saRenderDemoKpi();
   saRenderLevel();
   saRenderAge();
@@ -3188,49 +3195,113 @@ function saRenderDayList(elId, pts, reverse) {
   el.innerHTML = html;
 }
 
-/* ── YoY 同檔期 ── */
-function saRenderYoyCum() {
-  const D = saData.yoy;
+/* ── YoY 初始化 + 切換 ── */
+let saYoyKey = null;
+
+function saInitYoy() {
+  const tabsEl = document.getElementById('sa-yoy-tabs');
+  if (!tabsEl) return;
+  /* 倒序：最新一年放第一個（預設選中）*/
+  const comps = [...saData.yoy.comparisons].reverse();
+  tabsEl.innerHTML = comps.map((c, i) =>
+    `<button class="sa-tab${i === 0 ? ' active' : ''}" onclick="saSetYoy('${c.season}',this)">vs ${c.season}</button>`
+  ).join('');
+  saYoyKey = comps[0].season;
+  saRenderYoyCharts();
+}
+
+function saSetYoy(season, btn) {
+  if (btn) {
+    btn.parentElement.querySelectorAll('.sa-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  saYoyKey = season;
+  saRenderYoyCharts();
+}
+
+function saRenderYoyCharts() {
+  const comp = saData.yoy.comparisons.find(c => c.season === saYoyKey);
+  if (!comp) return;
+
+  /* ── 摘要文字 ── */
+  const sumEl = document.getElementById('sa-yoy-summary');
+  if (sumEl) {
+    const curN  = comp.same_period.current.length ? comp.same_period.current[comp.same_period.current.length-1] : 0;
+    const prevN = comp.same_period.prev.length    ? comp.same_period.prev[comp.same_period.prev.length-1]       : 0;
+    const diff  = curN - prevN;
+    const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+    const diffPct = prevN > 0 ? `(${(diff/prevN*100).toFixed(1)}%)` : '';
+    const diffColor = diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--tx3)';
+    const dayN = saData.yoy.cur_max_day;
+    sumEl.innerHTML = `
+      雪季第 <b style="color:var(--tx);font-family:monospace">${dayN}</b> 天（截至今日）：
+      <b style="color:#10b981;font-family:monospace">本季 ${curN.toLocaleString()}</b> 人 ｜
+      ${comp.season} 同期 <b style="color:#8b5cf6;font-family:monospace">${prevN.toLocaleString()}</b> 人 ｜
+      差距 <b style="color:${diffColor};font-family:monospace">${diffStr} ${diffPct}</b>
+      <br>
+      <span style="font-size:11px;color:var(--tx3)">${comp.season} 整季結算共 ${comp.prev_total.toLocaleString()} 人</span>`;
+  }
+
+  /* ── 同檔期累積 ── */
   saDestroyChart('yoyCum');
   saCharts.yoyCum = new Chart(document.getElementById('sa-yoyCumC'), {
     type:'line',
     data:{
-      labels: D.same_period.days,
+      labels: comp.same_period.days,
       datasets:[
-        { label:'本季('+saData.current_season+')', data:D.same_period.current, borderColor:'#10b981', backgroundColor:saCo('#10b981',.08), fill:true, tension:.3, borderWidth:2, pointRadius:0 },
-        { label:'去年('+D.prev_season+')', data:D.same_period.prev, borderColor:'#8b5cf6', backgroundColor:'transparent', borderDash:[5,4], tension:.3, borderWidth:2, pointRadius:0 },
+        { label:`本季 ${saData.current_season}`, data: comp.same_period.current,
+          borderColor:'#10b981', backgroundColor: saCo('#10b981', .12),
+          fill:true, tension:.3, borderWidth:2, pointRadius:0 },
+        { label:`${comp.season} 同期`, data: comp.same_period.prev,
+          borderColor:'#8b5cf6', backgroundColor:'transparent', borderDash:[5,4],
+          tension:.3, borderWidth:2, pointRadius:0 },
       ]
     },
     options:{
       ...saChartOpts(),
-      plugins:{ ...saChartOpts().plugins, legend:{ display:true, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:14,padding:8} } },
+      plugins:{
+        ...saChartOpts().plugins,
+        legend:{ display:true, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:14,padding:8} },
+        tooltip:{
+          ...saChartOpts().plugins.tooltip,
+          callbacks:{ title: (items) => `雪季第 ${items[0].label} 天` }
+        }
+      },
       scales:{
-        x:{ ...saChartOpts().scales.x, title:{display:true,text:'雪季第 N 天 (8/1 起算)',color:'#4a7299',font:{size:9}} },
-        y:{ ...saChartOpts().scales.y },
+        x:{ ...saChartOpts().scales.x,
+            title:{display:true, text:'雪季天數（5/1 起算）', color:'#4a7299', font:{size:10}},
+            ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:10 } },
+        y:{ ...saChartOpts().scales.y,
+            title:{display:true, text:'累積報名人次', color:'#4a7299', font:{size:10}} },
       }
     }
   });
-}
 
-/* ── YoY 同日比 ── */
-function saRenderYoyMd() {
-  const D = saData.yoy;
+  /* ── 同日比 ── */
   saDestroyChart('yoyMd');
   saCharts.yoyMd = new Chart(document.getElementById('sa-yoyMdC'), {
     type:'bar',
     data:{
-      labels: D.same_date.labels,
+      labels: comp.same_date.labels,
       datasets:[
-        { label:'本季', data:D.same_date.current, backgroundColor:saCo('#10b981',.8), borderRadius:1, borderSkipped:false },
-        { label:'去年', data:D.same_date.prev,    backgroundColor:saCo('#8b5cf6',.6), borderRadius:1, borderSkipped:false },
+        { label:`本季 ${saData.current_season}`, data: comp.same_date.current,
+          backgroundColor: saCo('#10b981', .85), borderRadius:1, borderSkipped:false },
+        { label:`${comp.season}`, data: comp.same_date.prev,
+          backgroundColor: saCo('#8b5cf6', .6),  borderRadius:1, borderSkipped:false },
       ]
     },
     options:{
       ...saChartOpts(),
-      plugins:{ ...saChartOpts().plugins, legend:{ display:true, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:10,padding:8} } },
+      plugins:{
+        ...saChartOpts().plugins,
+        legend:{ display:true, position:'bottom', labels:{color:'#8aadcc',font:{size:10},boxWidth:10,padding:8} }
+      },
       scales:{
-        x:{ ...saChartOpts().scales.x, ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:20 } },
-        y:{ ...saChartOpts().scales.y },
+        x:{ ...saChartOpts().scales.x,
+            title:{display:true, text:'出發月/日（按雪季順序 5→4 月）', color:'#4a7299', font:{size:10}},
+            ticks:{ ...saChartOpts().scales.x.ticks, maxTicksLimit:24 } },
+        y:{ ...saChartOpts().scales.y,
+            title:{display:true, text:'出發人次', color:'#4a7299', font:{size:10}} },
       }
     }
   });

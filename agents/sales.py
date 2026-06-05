@@ -375,59 +375,81 @@ def _to_season_day(d, season_start_month=5):
 
 
 def compute_yoy(current_df, historical_dfs, historical_seasons):
-    """跟最近一季歷年資料做：
-    - 同檔期累積（以雪季起始日為基準）
-    - 同日比（同 月/日 出發人次對照）
+    """
+    產生與每個歷年的對比：
+    - 同檔期累積：兩條線都截到本季當前累積天數（X 軸 = 雪季第 N 天，5/1 起算）
+    - 同日比：按雪季月份排序（5→12→1→4），出發日同 月/日 對照
+    回傳：{ cur_max_day: int, comparisons: [ {season, prev_total, same_period, same_date}, ... ] }
     """
     if not historical_dfs:
         return None
 
-    prev_df     = historical_dfs[-1]
-    prev_season = historical_seasons[-1]
+    # ── 本季資料預處理 ──
+    cur_signup_days = (
+        pd.to_datetime(current_df['報名日期'], errors='coerce')
+          .dropna().apply(_to_season_day)
+    )
+    cur_days_count = cur_signup_days.value_counts().sort_index()
+    cur_max_day = int(cur_days_count.index.max()) if len(cur_days_count) else 0
+    cur_total   = int(cur_days_count.sum())
 
-    cur_signup  = pd.to_datetime(current_df['報名日期'], errors='coerce')
-    prev_signup = pd.to_datetime(prev_df['報名日期'], errors='coerce')
+    cur_dep_md = (
+        current_df['出發日期'].apply(_parse_dep).dropna()
+            .apply(lambda d: f"{d.month:02d}/{d.day:02d}")
+    )
+    cur_md_count = cur_dep_md.value_counts()
 
-    cur_days  = cur_signup.dropna().apply(_to_season_day)
-    prev_days = prev_signup.dropna().apply(_to_season_day)
+    # ── 雪季月份排序 key（5/1 起算）──
+    def season_md_key(md):
+        m, d = md.split('/')
+        return ((int(m) - 5) % 12, int(d))
 
-    cur_days_count  = cur_days.value_counts().sort_index()
-    prev_days_count = prev_days.value_counts().sort_index()
+    comparisons = []
+    for hist_df, season in zip(historical_dfs, historical_seasons):
+        prev_signup_days = (
+            pd.to_datetime(hist_df['報名日期'], errors='coerce')
+              .dropna().apply(_to_season_day)
+        )
+        prev_days_count = prev_signup_days.value_counts().sort_index()
+        prev_total = int(prev_days_count.sum())
 
-    cur_max  = int(cur_days_count.index.max())  if len(cur_days_count)  else 0
-    prev_max = int(prev_days_count.index.max()) if len(prev_days_count) else 0
-    max_day  = max(cur_max, prev_max)
+        # 兩條線都跑到本季當前 day（同檔期）
+        cur_cum, prev_cum = [], []
+        c = p = 0
+        for d in range(cur_max_day + 1):
+            c += int(cur_days_count.get(d, 0))
+            p += int(prev_days_count.get(d, 0))
+            cur_cum.append(c)
+            prev_cum.append(p)
 
-    cur_cum, prev_cum = [], []
-    c = p = 0
-    for d in range(max_day + 1):
-        c += int(cur_days_count.get(d, 0))
-        p += int(prev_days_count.get(d, 0))
-        cur_cum.append(c)
-        prev_cum.append(p)
+        prev_dep_md = (
+            hist_df['出發日期'].apply(_parse_dep).dropna()
+                .apply(lambda d: f"{d.month:02d}/{d.day:02d}")
+        )
+        prev_md_count = prev_dep_md.value_counts()
 
-    # 同日比（出發日 月/日）
-    cur_dep_md = current_df['出發日期'].apply(_parse_dep).dropna() \
-                    .apply(lambda d: f"{d.month:02d}/{d.day:02d}")
-    prev_dep_md = prev_df['出發日期'].apply(_parse_dep).dropna() \
-                    .apply(lambda d: f"{d.month:02d}/{d.day:02d}")
-    cur_md  = cur_dep_md.value_counts().sort_index()
-    prev_md = prev_dep_md.value_counts().sort_index()
+        all_md = sorted(set(cur_md_count.index) | set(prev_md_count.index), key=season_md_key)
 
-    all_md = sorted(set(cur_md.index) | set(prev_md.index))
+        comparisons.append({
+            'season': season,
+            'prev_total': prev_total,
+            'cur_total':  cur_total,
+            'same_period': {
+                'days':    list(range(cur_max_day + 1)),
+                'current': cur_cum,
+                'prev':    prev_cum,
+            },
+            'same_date': {
+                'labels':  all_md,
+                'current': [int(cur_md_count.get(m, 0))  for m in all_md],
+                'prev':    [int(prev_md_count.get(m, 0)) for m in all_md],
+            },
+        })
 
     return {
-        'prev_season': prev_season,
-        'same_period': {
-            'days':    list(range(max_day + 1)),
-            'current': cur_cum,
-            'prev':    prev_cum,
-        },
-        'same_date': {
-            'labels':  all_md,
-            'current': [int(cur_md.get(m, 0))  for m in all_md],
-            'prev':    [int(prev_md.get(m, 0)) for m in all_md],
-        },
+        'cur_max_day': cur_max_day,
+        'cur_total':   cur_total,
+        'comparisons': comparisons,
     }
 
 
