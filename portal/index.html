@@ -951,6 +951,18 @@ async function callAPI(params) {
   } catch(e) { alert('連線失敗，請稍後再試'); }
 }
 
+/* 統一 API 呼叫：登入後優先用 userKey（永久有效），fallback 到 token */
+function apiUrl(action, extras) {
+  const params = new URLSearchParams({ action, ...(extras || {}) });
+  if (currentUser?.userKey && currentUser?.email) {
+    params.set('email',   currentUser.email);
+    params.set('userKey', currentUser.userKey);
+  } else if (idToken) {
+    params.set('token', idToken);
+  }
+  return `${API}?${params}`;
+}
+
 function handleResult(d) {
   hide('login-screen'); hide('register-screen'); hide('pending-screen'); hide('app-screen');
   if (d.status === 'approved') {
@@ -1124,7 +1136,7 @@ async function _loadTodaySummary() {
     if (ck && Date.now()-ts < 5*60*1000) { _renderTodaySummary(JSON.parse(ck), el); return; }
   } catch(e) {}
   try {
-    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getToday`,{redirect:'follow'});
+    const res  = await fetch(apiUrl('getToday'), {redirect:'follow'});
     const data = await res.json();
     if (data.status !== 'ok') throw new Error(data.message);
     localStorage.setItem('dbc_today', JSON.stringify(data));
@@ -1182,7 +1194,7 @@ async function _loadEquip(area, el) {
     if (ck && Date.now() - ts < CI_CACHE_TTL) {
       rows = JSON.parse(ck);
     } else {
-      const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCheckin&area=${area}`, {redirect:'follow'});
+      const res  = await fetch(apiUrl('getCheckin', {area}), {redirect:'follow'});
       const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || '伺服器錯誤');
       rows = data.rows || [];
@@ -1510,7 +1522,7 @@ async function loadCourse() {
   } catch(e) {}
   /* 直接嘗試抓取，token 過期時顯示重新登入按鈕 */
   try {
-    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCourse`, {redirect:'follow'});
+    const res  = await fetch(apiUrl('getCourse'), {redirect:'follow'});
     const data = await res.json();
     if (data.status !== 'ok') {
       if (data.message?.includes('Token') || data.message?.includes('未授權')) {
@@ -1714,7 +1726,7 @@ async function loadCheckin(area) {
     }
   } catch(e) {}
   try {
-    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCheckin&area=${area}`, {redirect:'follow'});
+    const res  = await fetch(apiUrl('getCheckin', {area}), {redirect:'follow'});
     const data = await res.json();
     if (data.status !== 'ok') {
       if (data.message?.includes('Token') || data.message?.includes('未授權')) {
@@ -1932,7 +1944,7 @@ async function loadCheckout(area) {
   } catch(e) {}
   // 抓取（呼叫 getCheckin，同一支 API）
   try {
-    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCheckin&area=${area}`, {redirect:'follow'});
+    const res  = await fetch(apiUrl('getCheckin', {area}), {redirect:'follow'});
     const data = await res.json();
     if (data.status !== 'ok') {
       if (data.message?.includes('Token') || data.message?.includes('未授權')) {
@@ -2108,7 +2120,7 @@ async function loadCoach() {
     }
   } catch(e) {}
   try {
-    const res  = await fetch(`${API}?token=${encodeURIComponent(idToken)}&action=getCoach`, {redirect:'follow'});
+    const res  = await fetch(apiUrl('getCoach'), {redirect:'follow'});
     const data = await res.json();
     if (data.status !== 'ok') {
       if (data.message?.includes('Token') || data.message?.includes('未授權')) {

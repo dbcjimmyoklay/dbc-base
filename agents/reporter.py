@@ -718,33 +718,10 @@ def run(cleaner_output=None):
     headers          = cleaner_output['headers']
     df_records       = cleaner_output['df_records']
 
-    # ── 報表1：每日教練需求 ──
-    print("\n[報表1] 每日教練需求...")
-    try:
-        coach_json = _build_coach_json(all_records_flat, DATE_START, DATE_END)
-        coach_html = COACH_HTML_TEMPLATE.replace('COACH_DATA_PLACEHOLDER', coach_json)
-        coach_path = os.path.join(BASE_DIR, 'dbc_coach_report.html')
-        with open(coach_path, 'w', encoding='utf-8') as f:
-            f.write(coach_html)
-        print(f"  OK → dbc_coach_report.html")
-    except Exception as e:
-        import traceback
-        print(f"  教練需求報表生成失敗：{e}")
-        traceback.print_exc()
-
-    # ── 報表2：銷量分析 ──
-    print("\n[報表2] 銷量分析...")
-    try:
-        sales_json = _build_sales_json(df_records, all_records_flat, headers)
-        sales_html = SALES_HTML_TEMPLATE.replace('REPORT_DATA_PLACEHOLDER', sales_json)
-        sales_path = os.path.join(BASE_DIR, 'dbc_sales_report.html')
-        with open(sales_path, 'w', encoding='utf-8') as f:
-            f.write(sales_html)
-        print(f"  OK → dbc_sales_report.html")
-    except Exception as e:
-        import traceback
-        print(f"  銷量報表生成失敗：{e}")
-        traceback.print_exc()
+    # ── 靜態 HTML 報表已停用（Portal 取代）──
+    # 教練需求 → Portal「每日教練需求」頁面（即時讀 Google Sheets）
+    # 銷量分析 → agents/sales.py + Portal「銷量分析」頁面
+    print("\n  (報表 HTML 已停用：請改用 Portal)")
 
     print(f"\n{'=' * 50}")
     print(f"REPORTER 完成！{datetime.now().strftime('%Y/%m/%d %H:%M')}")
