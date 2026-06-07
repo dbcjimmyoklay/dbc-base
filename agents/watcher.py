@@ -711,10 +711,21 @@ def run(cleaner_output=None):
     print(f"  刪減旅客：{len(deleted_pax)} 人")
     print(f"  日期/泊數異動：{len(date_changes)} 筆")
 
-    _write_compare_report(
-        sh_booking,
-        need_booking, need_add_pax, name_changes, deleted_pax, date_changes,
-    )
+    try:
+        _write_compare_report(
+            sh_booking,
+            need_booking, need_add_pax, name_changes, deleted_pax, date_changes,
+        )
+    except gspread.exceptions.APIError as e:
+        msg = str(e)
+        if '403' in msg or 'permission' in msg.lower():
+            print(f"\n  ⚠️ 比對報告寫入失敗：服務帳號無權限編輯野澤訂房表")
+            print(f"     請至野澤訂房表 → 右上「共用」→ 加入下列帳號為「編輯者」：")
+            print(f"     dbc-sheet@gen-lang-client-0187113768.iam.gserviceaccount.com")
+            print(f"     試算表 URL：https://docs.google.com/spreadsheets/d/{NOZAWA_BOOKING_SPREADSHEET_ID}/")
+            print(f"     （其餘 WATCHER 結果已正常處理）")
+        else:
+            raise
 
     print(f"\n{'=' * 50}")
     print(f"WATCHER 完成！{datetime.now().strftime('%Y/%m/%d %H:%M')}")
