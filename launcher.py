@@ -200,10 +200,7 @@ class Launcher(tk.Tk):
                     self._log(f'✗ {label} 失敗（exit code {proc.returncode}）\n', 'ng')
                     self._set_status(f'✗ {label} 失敗', NG_C)
 
-                # 通知這一步結果，鏈式呼叫下一步
-                if then: then(success=ok)
-
-                # 最後一步：所有事情都跑完了
+                # 最後一步：全部完成標記
                 if final and ok:
                     self._log('\n' + '═' * 40 + '\n', 'hdr')
                     self._log(f'🎉 全部完成！{datetime.now().strftime("%H:%M:%S")}\n', 'ok')
@@ -216,8 +213,11 @@ class Launcher(tk.Tk):
             except Exception as e:
                 self._log(f'✗ 例外：{e}\n', 'ng')
                 self._set_status('✗ 執行例外', NG_C)
-            finally:
-                self.busy = False
+                ok = False
+
+            # 先釋放 busy，再呼叫 then；下一步的 _run_cmd_async 才能正常啟動
+            self.busy = False
+            if then: then(success=ok)
 
         threading.Thread(target=worker, daemon=True).start()
 
