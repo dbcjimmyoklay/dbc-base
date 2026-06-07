@@ -161,7 +161,8 @@ class Launcher(tk.Tk):
         self.status.config(text=txt, fg=color)
         self.update_idletasks()
 
-    def _run_cmd_async(self, label, args, cwd=BASE_DIR, then=None):
+    def _run_cmd_async(self, label, args, cwd=BASE_DIR, then=None, final=False):
+        """final=True 時整個流程結束顯示「全部完成」"""
         if self.busy:
             self._log('⚠ 已有任務執行中，請稍候\n', 'ng')
             return
@@ -171,14 +172,19 @@ class Launcher(tk.Tk):
 
         def worker():
             try:
-                # 用 startupinfo 隱藏 cmd 黑窗
+                # ── Windows：用 UTF-8 強迫 Python 子程序輸出 utf-8 ──
+                env = os.environ.copy()
+                env['PYTHONIOENCODING'] = 'utf-8'
+                env['PYTHONUTF8']       = '1'
+
                 if os.name == 'nt':
                     si = subprocess.STARTUPINFO()
                     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 else:
                     si = None
+
                 proc = subprocess.Popen(
-                    args, cwd=cwd,
+                    args, cwd=cwd, env=env,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, encoding='utf-8', errors='replace',
                     startupinfo=si, bufsize=1,
@@ -186,14 +192,27 @@ class Launcher(tk.Tk):
                 for line in proc.stdout:
                     self._log(line)
                 proc.wait()
-                if proc.returncode == 0:
+                ok = (proc.returncode == 0)
+                if ok:
                     self._log(f'✓ {label} 完成\n', 'ok')
                     self._set_status(f'✓ {label} 完成', OK_C)
-                    if then: then(success=True)
                 else:
                     self._log(f'✗ {label} 失敗（exit code {proc.returncode}）\n', 'ng')
                     self._set_status(f'✗ {label} 失敗', NG_C)
-                    if then: then(success=False)
+
+                # 通知這一步結果，鏈式呼叫下一步
+                if then: then(success=ok)
+
+                # 最後一步：所有事情都跑完了
+                if final and ok:
+                    self._log('\n' + '═' * 40 + '\n', 'hdr')
+                    self._log(f'🎉 全部完成！{datetime.now().strftime("%H:%M:%S")}\n', 'ok')
+                    self._log('═' * 40 + '\n', 'hdr')
+                    self._set_status('🎉 全部完成', OK_C)
+                elif final and not ok:
+                    self._log('\n' + '═' * 40 + '\n', 'ng')
+                    self._log('⚠️ 流程中止（有步驟失敗）\n', 'ng')
+                    self._log('═' * 40 + '\n', 'ng')
             except Exception as e:
                 self._log(f'✗ 例外：{e}\n', 'ng')
                 self._set_status('✗ 執行例外', NG_C)
@@ -204,52 +223,44 @@ class Launcher(tk.Tk):
 
     # ── 各按鈕對應的動作 ──
 
-    def run_daily(self):
-        """跑每日流程 → 自動 push"""
-        def after_main(success):
-            if success:
-                self._run_cmd_async('git push (Portal 更新)',
-                                    ['git', 'push'])
-            # commit first
-        def after_add(success):
+    def _chain_push(self, msg):
+        """git add → commit → push 的鏈式執行，最後標記 final"""
+        def do_push(success):
+            if not success:
+                return
+            self._run_cmd_async('git push', ['git', 'push'], final=True)
+        def do_commit(success):
             if not success:
                 return
             self._run_cmd_async('git commit',
-                ['git', 'commit', '-m', f'每日資料更新 {datetime.now():%Y-%m-%d %H:%M}'],
-                then=after_main)
-        def after_run(success):
-            if not success:
-                return
-            self._run_cmd_async('git add', ['git', 'add', '-A'], then=after_add)
+                ['git', 'commit', '-m', msg], then=do_push)
+        self._run_cmd_async('git add', ['git', 'add', '-A'], then=do_commit)
 
+    def run_daily(self):
+        """跑每日流程 → 自動 push"""
+        def after_main(success):
+            if not success:
+                # 報告失敗
+                self._set_status('✗ main.py 失敗，停止', NG_C)
+                return
+            self._chain_push(f'每日資料更新 {datetime.now():%Y-%m-%d %H:%M}')
         self._run_cmd_async('main.py --all',
-            [PYTHON, 'main.py', '--all'], then=after_run)
+            [PYTHON, 'main.py', '--all'], then=after_main)
 
     def run_checkin(self):
         self._run_cmd_async('main.py --checkin',
-            [PYTHON, 'main.py', '--checkin'])
+            [PYTHON, 'main.py', '--checkin'], final=True)
 
     def run_sales(self):
         def after_run(success):
-            if not success: return
-            self._run_cmd_async('git add + commit + push',
-                ['git', 'add', 'portal/sales_data.json'])
-            # chain manually
-            def after_add(success):
-                if not success: return
-                self._run_cmd_async('git commit',
-                    ['git', 'commit', '-m', f'銷量更新 {datetime.now():%Y-%m-%d %H:%M}'],
-                    then=lambda success: self._run_cmd_async('git push', ['git', 'push']) if success else None)
+            if not success:
+                return
+            self._chain_push(f'銷量更新 {datetime.now():%Y-%m-%d %H:%M}')
         self._run_cmd_async('main.py --sales',
             [PYTHON, 'main.py', '--sales'], then=after_run)
 
     def run_push(self):
-        def after_add(success):
-            if not success: return
-            self._run_cmd_async('git commit',
-                ['git', 'commit', '-m', f'更新 {datetime.now():%Y-%m-%d %H:%M}'],
-                then=lambda success: self._run_cmd_async('git push', ['git', 'push']) if success else None)
-        self._run_cmd_async('git add', ['git', 'add', '-A'], then=after_add)
+        self._chain_push(f'更新 {datetime.now():%Y-%m-%d %H:%M}')
 
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
