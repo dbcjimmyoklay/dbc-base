@@ -322,13 +322,17 @@ def _read_booking_table(sh_booking):
     idx_en    = col_map.get('英文姓名', -1)
     idx_date  = col_map.get('出發日期', -1)
     idx_nights= col_map.get('泊數',   -1)
+    idx_adult = col_map.get('大人',   -1)
+    idx_child = col_map.get('小人',   -1)
+    idx_baby  = col_map.get('嬰兒',   -1)
 
+    # 訂房表每張訂單只在第一列填 訂編+姓名，後面的空白列無法明確判斷屬於哪張訂單
+    # → 只計算「有訂編 + 有姓名」的列；同訂編多人由我們之後展開
     for row in all_vals[1:]:
         def _g(idx):
             return row[idx].strip() if 0 <= idx < len(row) else ''
 
         ding_cell = _g(idx_ding)
-        # 用 regex 取所有 4-5 位數字 → 支援「5542 5561」「5542, 5561」等格式
         dings_in_row = re.findall(r'\d{4,5}', ding_cell)
         if not dings_in_row:
             continue
@@ -338,9 +342,16 @@ def _read_booking_table(sh_booking):
         dep     = _g(idx_date)
         nights  = _g(idx_nights)
 
-        # 判斷佔位姓名（旅客1 / 旅客2 / 旅客A 等）
-        is_ph = bool(re.match(r'^旅客\w+$', cn))
+        # 從「大人 / 小人 / 嬰兒」三欄相加得到該訂單實際人數
+        def _to_int(v):
+            try: return int(re.sub(r'\D', '', str(v))) if v else 0
+            except: return 0
+        n_adult = _to_int(_g(idx_adult)) if idx_adult >= 0 else 0
+        n_child = _to_int(_g(idx_child)) if idx_child >= 0 else 0
+        n_baby  = _to_int(_g(idx_baby))  if idx_baby  >= 0 else 0
+        head_count = n_adult + n_child + n_baby
 
+        is_ph       = bool(re.match(r'^旅客\w+$', cn))
         is_combined = len(dings_in_row) > 1
 
         for ding in dings_in_row:
@@ -349,13 +360,16 @@ def _read_booking_table(sh_booking):
                 order_info[ding] = {
                     '出發日期': dep,
                     '泊數'   : nights,
+                    '人數'   : head_count,   # 大人+小人+嬰兒
                     '是併房' : is_combined,
                     'rows'   : [],
                 }
             else:
-                # 如果之前是單獨出現但又有併房列，標為併房
                 if is_combined:
                     order_info[ding]['是併房'] = True
+                # 若同訂編有多列各自填了人數，取最大
+                if head_count > order_info[ding].get('人數', 0):
+                    order_info[ding]['人數'] = head_count
             order_info[ding]['rows'].append({
                 '中文姓名': cn,
                 '英文姓名': en,
@@ -454,9 +468,10 @@ def _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders):
                 '新值'   : new_nights,
             })
 
-        # 人數變動：併房訂單不算，因為一行包含多訂單，行數無法明確對應
+        # 人數變動：對比訂房表「大人+小人+嬰兒」欄位 vs 新資料人數
+        # 併房訂單不比對（一格多訂單時無法明確分配人數）
         if not info.get('是併房'):
-            old_count = len(info.get('rows', []))
+            old_count = info.get('人數', 0)
             new_count = len(people)
             if old_count > 0 and old_count != new_count:
                 changes.append({
