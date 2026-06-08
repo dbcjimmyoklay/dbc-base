@@ -21,6 +21,7 @@ WATCHER 比對員
 """
 
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -298,24 +299,24 @@ def _write_change_log(sh, ws_change, change_logs):
 def _read_booking_table(sh_booking):
     """
     讀取野澤訂房表 26-27 分頁
+    支援「併房」：同一儲存格可有多個訂編（空格/換行/逗號分隔）
+
     回傳：
-      booking_map   → dict  key(訂編_中文姓名) → {欄位: 值}
-      order_map     → dict  訂編 → list[旅客dict]  （同訂單所有人）
-      col_map       → dict  欄位名稱 → 索引
+      existing_dings → set  訂房表所有看過的訂編（含併房展開）
+      order_info     → dict ding → {出發日期, 泊數, 是併房, rows:[...]}
+      placeholders   → dict ding → list[(佔位中文姓名, 佔位英文姓名)]
     """
     ws = sh_booking.worksheet(NOZAWA_BOOKING_SHEET)
     all_vals = ws.get_all_values()
 
-    booking_map = {}
-    order_map   = {}
-    col_map     = {}
+    existing_dings = set()
+    order_info     = {}
+    placeholders   = {}
 
     if not all_vals:
-        return booking_map, order_map, col_map
+        return existing_dings, order_info, placeholders
 
-    # 第1列是標題
     col_map = {h.strip(): i for i, h in enumerate(all_vals[0]) if h.strip()}
-
     idx_ding  = col_map.get('訂編',   -1)
     idx_cn    = col_map.get('中文姓名', -1)
     idx_en    = col_map.get('英文姓名', -1)
@@ -326,161 +327,185 @@ def _read_booking_table(sh_booking):
         def _g(idx):
             return row[idx].strip() if 0 <= idx < len(row) else ''
 
-        ding = _g(idx_ding)
-        if not ding or not ding.isdigit():
-            continue                   # 略過空列或日期分隔列
+        ding_cell = _g(idx_ding)
+        # 用 regex 取所有 4-5 位數字 → 支援「5542 5561」「5542, 5561」等格式
+        dings_in_row = re.findall(r'\d{4,5}', ding_cell)
+        if not dings_in_row:
+            continue
 
         cn      = _g(idx_cn)
         en      = _g(idx_en)
         dep     = _g(idx_date)
         nights  = _g(idx_nights)
-        key     = f"{ding}_{cn}" if cn else f"{ding}_en_{en}"
 
-        record = {
-            '訂編'   : ding,
-            '中文姓名': cn,
-            '英文姓名': en,
-            '出發日期': dep,
-            '泊數'   : nights,
-            '_key'   : key,
-        }
-        booking_map[key] = record
+        # 判斷佔位姓名（旅客1 / 旅客2 / 旅客A 等）
+        is_ph = bool(re.match(r'^旅客\w+$', cn))
 
-        if ding not in order_map:
-            order_map[ding] = []
-        order_map[ding].append(record)
+        is_combined = len(dings_in_row) > 1
 
-    return booking_map, order_map, col_map
+        for ding in dings_in_row:
+            existing_dings.add(ding)
+            if ding not in order_info:
+                order_info[ding] = {
+                    '出發日期': dep,
+                    '泊數'   : nights,
+                    '是併房' : is_combined,
+                    'rows'   : [],
+                }
+            else:
+                # 如果之前是單獨出現但又有併房列，標為併房
+                if is_combined:
+                    order_info[ding]['是併房'] = True
+            order_info[ding]['rows'].append({
+                '中文姓名': cn,
+                '英文姓名': en,
+                '是佔位'  : is_ph,
+            })
+            if is_ph:
+                placeholders.setdefault(ding, []).append((cn, en))
+
+    return existing_dings, order_info, placeholders
 
 
-def _compare_nozawa(all_records_flat, booking_map, order_map):
+def _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders):
     """
-    比對最新野澤旅客 vs 訂房表現有資料
-    回傳五類清單：
-      need_booking  → 全新訂單（訂編完全不在訂房表）
-      need_add_pax  → 同訂單有新旅客（訂編存在但有人不在訂房表）
-      name_changes  → 姓名異動
-      deleted_pax   → 訂房表有、最新資料沒有
-      date_changes  → 出發日期或泊數異動
+    新版比對：產出 3 大區塊
+      new_orders     → 新增訂單（按訂編去重，每訂單一列）
+      removed_orders → 刪減訂單（訂房表有但新資料沒有）
+      changes        → 異動（出發日期/泊數/人數）
+      missing_names  → 補資料（訂房表佔位姓名 → 新資料真名）
     """
-    # 最新野澤旅客（只取野澤，不含純課）
-    nozawa_records = [
+    # 最新野澤旅客（不含純課）
+    nozawa = [
         r for r in all_records_flat
         if '野澤' in r.get('項目', '') and '純課' not in r.get('項目', '')
     ]
 
-    # 新資料的訂編集合
-    new_ding_set  = {r['訂編'] for r in nozawa_records}
-    new_key_set   = set()
+    # 新資料按訂編分組
+    new_by_ding = {}
+    for r in nozawa:
+        d = str(r.get('訂編', '') or '').strip()
+        if not d:
+            continue
+        new_by_ding.setdefault(d, []).append(r)
 
-    need_booking  = []   # 全新訂單
-    need_add_pax  = []   # 同訂單新增人員
-    name_changes  = []   # 姓名異動
-    date_changes  = []   # 日期/泊數異動
+    new_dings = set(new_by_ding.keys())
 
-    for r in nozawa_records:
-        ding    = r.get('訂編', '')
-        cn      = r.get('中文姓名', '')
-        en      = r.get('英文姓名', '')
-        dep_new = _norm_date(r.get('出發日期', ''))
-        nights_new = _val(r.get('泊數', ''))
-        key     = f"{ding}_{cn}" if cn else f"{ding}_en_{en}"
-        new_key_set.add(key)
+    # ── 區塊 1a：新增訂單 ──
+    new_orders = []
+    for ding in sorted(new_dings - existing_dings,
+                       key=lambda d: (_norm_date(new_by_ding[d][0].get('出發日期','')), d)):
+        people = new_by_ding[ding]
+        first  = people[0]
+        new_orders.append({
+            '訂編'   : ding,
+            '出發日期': _norm_date(first.get('出發日期', '')),
+            '泊數'   : str(first.get('泊數', '') or '').strip(),
+            '天數'   : str(first.get('天數', '') or '').strip(),
+            '中文姓名': first.get('中文姓名', ''),
+            '英文姓名': first.get('英文姓名', ''),
+            '人數'   : len(people),
+            '備註'   : first.get('備註', '') or '',
+        })
 
-        if ding not in order_map:
-            # ── ① 全新訂單（訂編不存在）──
-            # 同訂單第一次出現才加，避免重複
-            if not any(x['訂編'] == ding for x in need_booking):
-                need_booking.append({
-                    '訂編'    : ding,
-                    '出發日期': dep_new,
-                    '泊數'    : nights_new,
-                    '中文姓名': cn,
-                    '英文姓名': en,
-                    '天數'    : r.get('天數', ''),
-                    '備註'    : r.get('備註', ''),
-                    '_is_first': True,
+    # ── 區塊 1b：刪減訂單 ──
+    removed_orders = []
+    for ding in sorted(existing_dings - new_dings,
+                       key=lambda d: (order_info[d].get('出發日期', ''), d)):
+        info = order_info[ding]
+        first_pax = info['rows'][0] if info['rows'] else {}
+        removed_orders.append({
+            '訂編'   : ding,
+            '出發日期': info.get('出發日期', ''),
+            '中文姓名': first_pax.get('中文姓名', ''),
+            '英文姓名': first_pax.get('英文姓名', ''),
+        })
+
+    # ── 區塊 2：異動 ──
+    changes = []
+    for ding in sorted(new_dings & existing_dings,
+                       key=lambda d: (order_info[d].get('出發日期', ''), d)):
+        info = order_info[ding]
+        people = new_by_ding[ding]
+        first  = people[0]
+        first_name = first.get('中文姓名', '') or ''
+
+        old_dep = info.get('出發日期', '')
+        new_dep = _norm_date(first.get('出發日期', ''))
+        if old_dep and new_dep and old_dep != new_dep:
+            changes.append({
+                '訂編'   : ding,
+                '中文姓名': first_name,
+                '出發日期': new_dep,
+                '類型'   : '出發日期',
+                '原值'   : old_dep,
+                '新值'   : new_dep,
+            })
+
+        old_nights = str(info.get('泊數', '') or '').strip()
+        new_nights = str(first.get('泊數', '') or '').strip()
+        if old_nights and new_nights and old_nights != new_nights:
+            changes.append({
+                '訂編'   : ding,
+                '中文姓名': first_name,
+                '出發日期': new_dep,
+                '類型'   : '泊數',
+                '原值'   : old_nights,
+                '新值'   : new_nights,
+            })
+
+        # 人數變動：併房訂單不算，因為一行包含多訂單，行數無法明確對應
+        if not info.get('是併房'):
+            old_count = len(info.get('rows', []))
+            new_count = len(people)
+            if old_count > 0 and old_count != new_count:
+                changes.append({
+                    '訂編'   : ding,
+                    '中文姓名': first_name,
+                    '出發日期': new_dep,
+                    '類型'   : '人數',
+                    '原值'   : f'{old_count}人',
+                    '新值'   : f'{new_count}人',
                 })
-            else:
-                # 同訂單後續人員也列出
-                need_booking.append({
-                    '訂編'    : ding,
-                    '出發日期': dep_new,
-                    '泊數'    : nights_new,
-                    '中文姓名': cn,
-                    '英文姓名': en,
-                    '天數'    : r.get('天數', ''),
-                    '備註'    : r.get('備註', ''),
-                    '_is_first': False,
-                })
-        else:
-            # 訂編存在，逐人比對
-            booking_keys_for_order = {b['_key'] for b in order_map[ding]}
-            if key not in booking_keys_for_order:
-                # ── ② 同訂單新增人員 ──
-                need_add_pax.append({
-                    '訂編'    : ding,
-                    '出發日期': dep_new,
-                    '泊數'    : nights_new,
-                    '中文姓名': cn,
-                    '英文姓名': en,
-                })
-            else:
-                # 已存在：檢查姓名和日期
-                old = booking_map.get(key, {})
-                cn_old  = _val(old.get('中文姓名', ''))
-                en_old  = _val(old.get('英文姓名', ''))
-                dep_old = _norm_date(old.get('出發日期', ''))
-                nts_old = _val(old.get('泊數', ''))
 
-                # ── ③ 姓名異動 ──
-                if cn_old != _val(cn) or en_old != _val(en):
-                    name_changes.append({
-                        '訂編'    : ding,
-                        '原中文'  : cn_old,
-                        '新中文'  : _val(cn),
-                        '原英文'  : en_old,
-                        '新英文'  : _val(en),
-                    })
+    # ── 區塊 3：補資料 ──
+    missing_names = []
+    PLACEHOLDER_RE = re.compile(r'^旅客\w+$')
+    for ding, ph_list in placeholders.items():
+        if ding not in new_by_ding:
+            continue
+        # 從新資料抽出「不是佔位」的真名
+        real = [p for p in new_by_ding[ding]
+                if not PLACEHOLDER_RE.match(str(p.get('中文姓名', '') or '').strip())]
+        if not real:
+            continue
+        # 整理真名 + 英文（佔位數 vs 真名數 也許不一致，全列出來）
+        cn_names = '／'.join([p.get('中文姓名', '') for p in real if p.get('中文姓名')])
+        en_names = '／'.join([p.get('英文姓名', '') for p in real if p.get('英文姓名')])
+        missing_names.append({
+            '訂編'    : ding,
+            '出發日期': order_info[ding].get('出發日期', ''),
+            '中文姓名': cn_names,
+            '英文姓名': en_names,
+            '佔位數'  : len(ph_list),
+            '佔位姓名': '／'.join([n[0] for n in ph_list]),
+        })
+    missing_names.sort(key=lambda x: (x['出發日期'], x['訂編']))
 
-                # ── ⑤ 出發日期 / 泊數異動 ──
-                if dep_old and dep_old != dep_new:
-                    date_changes.append({
-                        '訂編'    : ding,
-                        '中文姓名': cn,
-                        '異動欄位': '出發日期',
-                        '原值'   : dep_old,
-                        '新值'   : dep_new,
-                    })
-                if nts_old and nts_old != nights_new:
-                    date_changes.append({
-                        '訂編'    : ding,
-                        '中文姓名': cn,
-                        '異動欄位': '泊數',
-                        '原值'   : nts_old,
-                        '新值'   : nights_new,
-                    })
-
-    # ── ④ 刪減：訂房表有，最新資料沒有 ──
-    deleted_pax = []
-    for key, old in booking_map.items():
-        if old['訂編'] not in new_ding_set:
-            deleted_pax.append(old)
-        elif key not in new_key_set:
-            deleted_pax.append(old)
-
-    return need_booking, need_add_pax, name_changes, deleted_pax, date_changes
+    return new_orders, removed_orders, changes, missing_names
 
 
-def _write_compare_report(sh_booking, need_booking, need_add_pax,
-                           name_changes, deleted_pax, date_changes):
+def _write_compare_report(sh_booking, new_orders, removed_orders, changes, missing_names):
     """
     在野澤訂房表試算表中寫入「比對報告」分頁
-    格式：區塊式，各類異動分開，有顏色標示
+    新版三大區塊：
+      ① 新增 / 刪減訂單
+      ② 異動（出發日期 / 泊數 / 人數）
+      ③ 補資料（佔位姓名 → 真實姓名）
+    欄位：出發日期 / 泊數 / 天數 / 訂編 / 中文姓名 / 英文姓名 / 備註
     """
     print("  建立/更新 野澤訂房比對報告...")
 
-    # 取得或建立「比對報告」分頁
     try:
         ws = sh_booking.worksheet(NOZAWA_COMPARE_SHEET)
     except gspread.exceptions.WorksheetNotFound:
@@ -489,16 +514,20 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
     now_str = datetime.now().strftime('%Y/%m/%d %H:%M')
     sid     = ws.id
 
-    # ── 統一欄位順序：出發日期 / 泊數 / 天數 / 訂編 / 中文姓名 / 英文姓名 / 備註 ──
+    # ── 統一欄位：出發日期 / 泊數 / 天數 / 訂編 / 中文姓名 / 英文姓名 / 備註 ──
     N_COLS  = 7
     HEADERS = ['出發日期', '泊數', '天數', '訂編', '中文姓名', '英文姓名', '備註']
 
-    rows   = []   # list of list[str]
-    colors = []   # list of color key
+    rows   = []
+    colors = []
 
     def _add_title(text):
         rows.append([text] + [''] * (N_COLS - 1))
         colors.append('title')
+
+    def _add_section(text, color_key='section'):
+        rows.append([text] + [''] * (N_COLS - 1))
+        colors.append(color_key)
 
     def _add_header():
         rows.append(HEADERS)
@@ -516,121 +545,96 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
         rows.append(['（無）'] + [''] * (N_COLS - 1))
         colors.append(None)
 
-    # ── 同訂單去重：只保留首位旅客（with 人數計算）──
-    def _dedupe_by_order(items):
-        """同訂編只保留第一筆，並計算同訂單總人數"""
-        order_count = {}
-        for x in items:
-            order_count[x['訂編']] = order_count.get(x['訂編'], 0) + 1
-        seen = set()
-        result = []
-        for x in items:
-            if x['訂編'] in seen:
-                continue
-            seen.add(x['訂編'])
-            y = dict(x)
-            y['_total_pax'] = order_count[x['訂編']]
-            result.append(y)
-        return result
-
-    # ── 依出發日期排序 + 分組著色 ──
-    def _date_color_key(date_str, group_idx):
-        """單數日期 → date_a，雙數 → date_b（交替底色區隔不同日期）"""
-        return 'date_a' if group_idx % 2 == 0 else 'date_b'
+    # 依出發日期交替底色
+    def _date_color_key(prev_date, cur_date, prev_color):
+        if cur_date == prev_date:
+            return prev_color
+        return 'date_b' if prev_color == 'date_a' else 'date_a'
 
     # 更新時間
     rows.append([f'更新時間：{now_str}'] + [''] * (N_COLS - 1))
     colors.append(None)
     _add_empty()
 
-    # ── ① 需要訂房（全新訂單）──
-    _add_title('▼ 需要訂房（新訂單）')
-    if need_booking:
+    # ═══════════════════════════════════════════
+    # 區塊 ①：新增 / 刪減訂單
+    # ═══════════════════════════════════════════
+    _add_title('═══ ① 新增 / 刪減 訂單 ═══')
+
+    _add_section('▶ 新增訂單（需安排訂房）', 'section_add')
+    if new_orders:
         _add_header()
-        dedup = _dedupe_by_order(need_booking)
-        dedup.sort(key=lambda x: (x.get('出發日期', ''), x['訂編']))
         prev_date = None
-        group_idx = -1
-        for x in dedup:
-            dep = x.get('出發日期', '')
-            if dep != prev_date:
-                group_idx += 1
-                prev_date = dep
-            c = _date_color_key(dep, group_idx)
-            extra = f"共{x['_total_pax']}人" if x['_total_pax'] > 1 else ''
-            note  = x.get('備註', '') or ''
-            if extra:
-                note = f"{extra}  {note}".strip()
+        cur_color = 'date_b'   # 第一筆從 date_a 開始
+        for x in new_orders:
+            cur_color = _date_color_key(prev_date, x['出發日期'], cur_color)
+            prev_date = x['出發日期']
+            note = f"共{x['人數']}人" if x['人數'] > 1 else ''
+            if x.get('備註'):
+                note = (note + '  ' + x['備註']).strip()
             _add_data(
-                [dep, x.get('泊數', ''), x.get('天數', ''),
-                 x['訂編'], x['中文姓名'], x.get('英文姓名', ''), note],
-                c,
+                [x['出發日期'], x['泊數'], x['天數'],
+                 x['訂編'], x['中文姓名'], x['英文姓名'], note],
+                cur_color,
             )
     else:
         _add_none()
     _add_empty()
 
-    # ── ② 同訂單新增人員 ──
-    _add_title('▼ 同訂單新增人員（已訂房，請通知旅館多訂房）')
-    if need_add_pax:
+    _add_section('▶ 刪減訂單（請確認是否取消訂房）', 'section_del')
+    if removed_orders:
         _add_header()
-        dedup = _dedupe_by_order(need_add_pax)
-        dedup.sort(key=lambda x: (x.get('出發日期', ''), x['訂編']))
         prev_date = None
-        group_idx = -1
-        for x in dedup:
-            dep = x.get('出發日期', '')
-            if dep != prev_date:
-                group_idx += 1
-                prev_date = dep
-            c = _date_color_key(dep, group_idx)
-            note = f"+{x['_total_pax']}人加入"
+        cur_color = 'date_b'
+        for x in removed_orders:
+            cur_color = _date_color_key(prev_date, x['出發日期'], cur_color)
+            prev_date = x['出發日期']
             _add_data(
-                [dep, x.get('泊數', ''), '',
-                 x['訂編'], x['中文姓名'], x.get('英文姓名', ''), note],
-                c,
-            )
-    else:
-        _add_none()
-    _add_empty()
-
-    # ── ③ 姓名需確認 ──
-    _add_title('▼ 姓名需確認（請更新訂房表）')
-    if name_changes:
-        _add_header()
-        for x in name_changes:
-            note = f"原: {x.get('原中文','')} / {x.get('原英文','')}"
-            _add_data(
-                ['', '', '', x['訂編'], x.get('新中文', ''), x.get('新英文', ''), note],
-                'name',
-            )
-    else:
-        _add_none()
-    _add_empty()
-
-    # ── ④ 已刪減（請確認是否取消訂房）──
-    _add_title('▼ 已刪減（請確認是否取消訂房）')
-    if deleted_pax:
-        _add_header()
-        for x in deleted_pax:
-            _add_data(
-                [x.get('出發日期', ''), '', '',
-                 x['訂編'], x['中文姓名'], x.get('英文姓名', ''), '刪減'],
+                [x['出發日期'], '', '',
+                 x['訂編'], x['中文姓名'], x['英文姓名'], '請確認是否取消'],
                 'del',
             )
     else:
         _add_none()
     _add_empty()
 
-    # ── ⑤ 出發日期 / 泊數異動 ──
-    _add_title('▼ 出發日期 / 泊數有異動（請確認住宿是否需調整）')
-    if date_changes:
+    # ═══════════════════════════════════════════
+    # 區塊 ②：異動
+    # ═══════════════════════════════════════════
+    _add_title('═══ ② 異動（出發日期 / 泊數 / 人數）═══')
+    if changes:
         _add_header()
-        for x in date_changes:
-            note = f"{x.get('異動欄位','')}: {x.get('原值','')} → {x.get('新值','')}"
+        prev_date = None
+        cur_color = 'date_b'
+        for x in changes:
+            dep = x.get('出發日期', '')
+            cur_color = _date_color_key(prev_date, dep, cur_color)
+            prev_date = dep
+            note = f"{x['類型']}: {x['原值']} → {x['新值']}"
             _add_data(
-                ['', '', '', x['訂編'], x.get('中文姓名', ''), '', note],
-                'date',
+                [dep, '', '', x['訂編'], x['中文姓名'], '', note],
+                cur_color,
+            )
+    else:
+        _add_none()
+    _add_empty()
+
+    # ═══════════════════════════════════════════
+    # 區塊 ③：補資料
+    # ═══════════════════════════════════════════
+    _add_title('═══ ③ 補資料（訂房表佔位姓名 → 真實姓名）═══')
+    if missing_names:
+        _add_header()
+        prev_date = None
+        cur_color = 'date_b'
+        for x in missing_names:
+            dep = x.get('出發日期', '')
+            cur_color = _date_color_key(prev_date, dep, cur_color)
+            prev_date = dep
+            note = f"原佔位：{x['佔位姓名']}（{x['佔位數']}位）"
+            _add_data(
+                [dep, '', '', x['訂編'], x['中文姓名'], x['英文姓名'], note],
+                cur_color,
             )
     else:
         _add_none()
@@ -647,21 +651,24 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
 
     # ── 格式設定 ──
     COLOR_MAP = {
-        'title' : C_HDR,
-        'header': {'red': 0.3, 'green': 0.3, 'blue': 0.3},
-        'date_a': {'red': 0.94, 'green': 0.97, 'blue': 1.00},   # 淡藍
-        'date_b': {'red': 1.00, 'green': 0.97, 'blue': 0.88},   # 淡黃
-        'name'  : C_NAME,
-        'del'   : C_DEL,
-        'date'  : C_DATE,
+        'title'      : C_HDR,
+        'header'     : {'red': 0.3,  'green': 0.3,  'blue': 0.3},
+        'section_add': {'red': 0.18, 'green': 0.49, 'blue': 0.20},   # 深綠（新增區段）
+        'section_del': {'red': 0.70, 'green': 0.18, 'blue': 0.18},   # 深紅（刪減區段）
+        'section'    : {'red': 0.20, 'green': 0.30, 'blue': 0.50},   # 深藍灰
+        'date_a'     : {'red': 0.94, 'green': 0.97, 'blue': 1.00},   # 淡藍
+        'date_b'     : {'red': 1.00, 'green': 0.97, 'blue': 0.88},   # 淡黃
+        'del'        : {'red': 1.00, 'green': 0.90, 'blue': 0.90},   # 淡紅
     }
     TEXT_WHITE = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
+    BOLD_KEYS  = {'title', 'header', 'section_add', 'section_del', 'section'}
 
     fmt_reqs = []
     for i, (row_data, color_key) in enumerate(zip(rows, colors), 1):
         if color_key is None:
             continue
         color = COLOR_MAP.get(color_key, C_WHITE)
+        is_dark = color_key in BOLD_KEYS
         fmt_reqs.append({
             'repeatCell': {
                 'range': {'sheetId': sid, 'startRowIndex': i - 1, 'endRowIndex': i,
@@ -669,8 +676,8 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
                 'cell' : {'userEnteredFormat': {
                     'backgroundColor': color,
                     'textFormat'     : {
-                        'bold': color_key in ('title', 'header'),
-                        'foregroundColor': TEXT_WHITE if color_key in ('title', 'header') else {'red': 0.1, 'green': 0.1, 'blue': 0.1},
+                        'bold': is_dark,
+                        'foregroundColor': TEXT_WHITE if is_dark else {'red': 0.1, 'green': 0.1, 'blue': 0.1},
                     },
                 }},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat)',
@@ -687,8 +694,8 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
     batch_update(sh_booking, fmt_reqs)
 
     total_sections = sum([
-        len(need_booking), len(need_add_pax),
-        len(name_changes), len(deleted_pax), len(date_changes),
+        len(new_orders), len(removed_orders),
+        len(changes), len(missing_names),
     ])
     print(f"  OK 比對報告已更新（{total_sections} 項待確認）")
 
@@ -742,24 +749,22 @@ def run(cleaner_output=None):
     gc         = gspread.authorize(creds)
     sh_booking = gc.open_by_key(NOZAWA_BOOKING_SPREADSHEET_ID)
 
-    booking_map, order_map, _ = _read_booking_table(sh_booking)
-    print(f"  訂房表現有旅客：{len(booking_map)} 筆，"
-          f"共 {len(order_map)} 個訂單")
+    existing_dings, order_info, placeholders = _read_booking_table(sh_booking)
+    print(f"  訂房表現有訂單：{len(existing_dings)} 個"
+          f"（含併房展開）")
 
-    need_booking, need_add_pax, name_changes, deleted_pax, date_changes = \
-        _compare_nozawa(all_records_flat, booking_map, order_map)
+    new_orders, removed_orders, changes, missing_names = \
+        _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders)
 
-    print(f"  新訂單需訂房：{len(set(x['訂編'] for x in need_booking))} 個訂單"
-          f"（{len(need_booking)} 人）")
-    print(f"  同訂單新增人員：{len(need_add_pax)} 人")
-    print(f"  姓名異動：{len(name_changes)} 筆")
-    print(f"  刪減旅客：{len(deleted_pax)} 人")
-    print(f"  日期/泊數異動：{len(date_changes)} 筆")
+    print(f"  新增訂單：{len(new_orders)} 個")
+    print(f"  刪減訂單：{len(removed_orders)} 個")
+    print(f"  異動    ：{len(changes)} 筆")
+    print(f"  補資料  ：{len(missing_names)} 筆")
 
     try:
         _write_compare_report(
             sh_booking,
-            need_booking, need_add_pax, name_changes, deleted_pax, date_changes,
+            new_orders, removed_orders, changes, missing_names,
         )
     except gspread.exceptions.APIError as e:
         msg = str(e)
