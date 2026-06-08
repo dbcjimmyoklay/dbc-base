@@ -489,111 +489,157 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
     now_str = datetime.now().strftime('%Y/%m/%d %H:%M')
     sid     = ws.id
 
-    # ── 建立要寫入的所有列 ──
+    # ── 統一欄位順序：出發日期 / 泊數 / 天數 / 訂編 / 中文姓名 / 英文姓名 / 備註 ──
+    N_COLS  = 7
+    HEADERS = ['出發日期', '泊數', '天數', '訂編', '中文姓名', '英文姓名', '備註']
+
     rows   = []   # list of list[str]
-    colors = []   # list of (row_1based, color) 或 None 代表不填色
+    colors = []   # list of color key
 
     def _add_title(text):
-        rows.append([text] + [''] * 11)
+        rows.append([text] + [''] * (N_COLS - 1))
         colors.append('title')
 
-    def _add_header(cols_list):
-        rows.append(cols_list + [''] * max(0, 12 - len(cols_list)))
+    def _add_header():
+        rows.append(HEADERS)
         colors.append('header')
 
     def _add_data(cols_list, color):
-        rows.append(cols_list + [''] * max(0, 12 - len(cols_list)))
+        rows.append(cols_list + [''] * max(0, N_COLS - len(cols_list)))
         colors.append(color)
 
     def _add_empty():
-        rows.append([''] * 12)
+        rows.append([''] * N_COLS)
         colors.append(None)
 
+    def _add_none():
+        rows.append(['（無）'] + [''] * (N_COLS - 1))
+        colors.append(None)
+
+    # ── 同訂單去重：只保留首位旅客（with 人數計算）──
+    def _dedupe_by_order(items):
+        """同訂編只保留第一筆，並計算同訂單總人數"""
+        order_count = {}
+        for x in items:
+            order_count[x['訂編']] = order_count.get(x['訂編'], 0) + 1
+        seen = set()
+        result = []
+        for x in items:
+            if x['訂編'] in seen:
+                continue
+            seen.add(x['訂編'])
+            y = dict(x)
+            y['_total_pax'] = order_count[x['訂編']]
+            result.append(y)
+        return result
+
+    # ── 依出發日期排序 + 分組著色 ──
+    def _date_color_key(date_str, group_idx):
+        """單數日期 → date_a，雙數 → date_b（交替底色區隔不同日期）"""
+        return 'date_a' if group_idx % 2 == 0 else 'date_b'
+
     # 更新時間
-    rows.append([f'更新時間：{now_str}'] + [''] * 11)
+    rows.append([f'更新時間：{now_str}'] + [''] * (N_COLS - 1))
     colors.append(None)
     _add_empty()
 
     # ── ① 需要訂房（全新訂單）──
     _add_title('▼ 需要訂房（新訂單）')
     if need_booking:
-        _add_header(['訂編', '出發日期', '泊數', '天數', '中文姓名', '英文姓名', '備註'])
-        prev_ding = None
-        for x in need_booking:
-            is_new_order = x['訂編'] != prev_ding
+        _add_header()
+        dedup = _dedupe_by_order(need_booking)
+        dedup.sort(key=lambda x: (x.get('出發日期', ''), x['訂編']))
+        prev_date = None
+        group_idx = -1
+        for x in dedup:
+            dep = x.get('出發日期', '')
+            if dep != prev_date:
+                group_idx += 1
+                prev_date = dep
+            c = _date_color_key(dep, group_idx)
+            extra = f"共{x['_total_pax']}人" if x['_total_pax'] > 1 else ''
+            note  = x.get('備註', '') or ''
+            if extra:
+                note = f"{extra}  {note}".strip()
             _add_data(
-                [x['訂編'], x['出發日期'], x['泊數'], x['天數'],
-                 x['中文姓名'], x['英文姓名'], x['備註']],
-                'need' if is_new_order else 'need_extra',
+                [dep, x.get('泊數', ''), x.get('天數', ''),
+                 x['訂編'], x['中文姓名'], x.get('英文姓名', ''), note],
+                c,
             )
-            prev_ding = x['訂編']
     else:
-        rows.append(['（無）'] + [''] * 11)
-        colors.append(None)
+        _add_none()
     _add_empty()
 
     # ── ② 同訂單新增人員 ──
-    _add_title('▼ 需要訂房（同訂單新增人員）')
+    _add_title('▼ 同訂單新增人員（已訂房，請通知旅館多訂房）')
     if need_add_pax:
-        _add_header(['訂編', '出發日期', '泊數', '中文姓名', '英文姓名'])
-        for x in need_add_pax:
+        _add_header()
+        dedup = _dedupe_by_order(need_add_pax)
+        dedup.sort(key=lambda x: (x.get('出發日期', ''), x['訂編']))
+        prev_date = None
+        group_idx = -1
+        for x in dedup:
+            dep = x.get('出發日期', '')
+            if dep != prev_date:
+                group_idx += 1
+                prev_date = dep
+            c = _date_color_key(dep, group_idx)
+            note = f"+{x['_total_pax']}人加入"
             _add_data(
-                [x['訂編'], x['出發日期'], x['泊數'],
-                 x['中文姓名'], x['英文姓名']],
-                'add_pax',
+                [dep, x.get('泊數', ''), '',
+                 x['訂編'], x['中文姓名'], x.get('英文姓名', ''), note],
+                c,
             )
     else:
-        rows.append(['（無）'] + [''] * 11)
-        colors.append(None)
+        _add_none()
     _add_empty()
 
     # ── ③ 姓名需確認 ──
     _add_title('▼ 姓名需確認（請更新訂房表）')
     if name_changes:
-        _add_header(['訂編', '原中文姓名', '新中文姓名', '原英文姓名', '新英文姓名'])
+        _add_header()
         for x in name_changes:
+            note = f"原: {x.get('原中文','')} / {x.get('原英文','')}"
             _add_data(
-                [x['訂編'], x['原中文'], x['新中文'], x['原英文'], x['新英文']],
+                ['', '', '', x['訂編'], x.get('新中文', ''), x.get('新英文', ''), note],
                 'name',
             )
     else:
-        rows.append(['（無）'] + [''] * 11)
-        colors.append(None)
+        _add_none()
     _add_empty()
 
     # ── ④ 已刪減（請確認是否取消訂房）──
     _add_title('▼ 已刪減（請確認是否取消訂房）')
     if deleted_pax:
-        _add_header(['訂編', '出發日期', '中文姓名', '英文姓名'])
+        _add_header()
         for x in deleted_pax:
             _add_data(
-                [x['訂編'], x.get('出發日期', ''),
-                 x['中文姓名'], x['英文姓名']],
+                [x.get('出發日期', ''), '', '',
+                 x['訂編'], x['中文姓名'], x.get('英文姓名', ''), '刪減'],
                 'del',
             )
     else:
-        rows.append(['（無）'] + [''] * 11)
-        colors.append(None)
+        _add_none()
     _add_empty()
 
     # ── ⑤ 出發日期 / 泊數異動 ──
     _add_title('▼ 出發日期 / 泊數有異動（請確認住宿是否需調整）')
     if date_changes:
-        _add_header(['訂編', '中文姓名', '異動欄位', '原值', '新值'])
+        _add_header()
         for x in date_changes:
+            note = f"{x.get('異動欄位','')}: {x.get('原值','')} → {x.get('新值','')}"
             _add_data(
-                [x['訂編'], x['中文姓名'], x['異動欄位'], x['原值'], x['新值']],
+                ['', '', '', x['訂編'], x.get('中文姓名', ''), '', note],
                 'date',
             )
     else:
-        rows.append(['（無）'] + [''] * 11)
-        colors.append(None)
+        _add_none()
 
     # ── 清空舊內容，寫入新資料 ──
     sh_booking.batch_update({'requests': [{
         'updateCells': {
             'range' : {'sheetId': sid, 'startRowIndex': 0, 'endRowIndex': 500,
-                       'startColumnIndex': 0, 'endColumnIndex': 12},
+                       'startColumnIndex': 0, 'endColumnIndex': N_COLS},
             'fields': 'userEnteredValue,userEnteredFormat',
         }
     }]})
@@ -601,14 +647,13 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
 
     # ── 格式設定 ──
     COLOR_MAP = {
-        'title'     : C_HDR,
-        'header'    : {'red': 0.3, 'green': 0.3, 'blue': 0.3},
-        'need'      : C_NEED,
-        'need_extra': {'red': 1.0, 'green': 1.0, 'blue': 0.88},
-        'add_pax'   : C_ADD,
-        'name'      : C_NAME,
-        'del'       : C_DEL,
-        'date'      : C_DATE,
+        'title' : C_HDR,
+        'header': {'red': 0.3, 'green': 0.3, 'blue': 0.3},
+        'date_a': {'red': 0.94, 'green': 0.97, 'blue': 1.00},   # 淡藍
+        'date_b': {'red': 1.00, 'green': 0.97, 'blue': 0.88},   # 淡黃
+        'name'  : C_NAME,
+        'del'   : C_DEL,
+        'date'  : C_DATE,
     }
     TEXT_WHITE = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
 
@@ -620,7 +665,7 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
         fmt_reqs.append({
             'repeatCell': {
                 'range': {'sheetId': sid, 'startRowIndex': i - 1, 'endRowIndex': i,
-                          'startColumnIndex': 0, 'endColumnIndex': 12},
+                          'startColumnIndex': 0, 'endColumnIndex': N_COLS},
                 'cell' : {'userEnteredFormat': {
                     'backgroundColor': color,
                     'textFormat'     : {
@@ -632,12 +677,12 @@ def _write_compare_report(sh_booking, need_booking, need_add_pax,
             }
         })
 
-    # 欄寬
-    for ci, px in enumerate([55, 65, 40, 40, 80, 150, 150, 80, 80, 80, 80, 80]):
+    # 欄寬：出發日期 / 泊數 / 天數 / 訂編 / 中文姓名 / 英文姓名 / 備註
+    for ci, px in enumerate([72, 45, 45, 65, 80, 130, 160]):
         fmt_reqs.append(req_col_width(sid, ci, px))
 
     # 格線（全部資料範圍）
-    fmt_reqs.append(req_borders(sid, 1, len(rows), 0, 12))
+    fmt_reqs.append(req_borders(sid, 1, len(rows), 0, N_COLS))
 
     batch_update(sh_booking, fmt_reqs)
 
