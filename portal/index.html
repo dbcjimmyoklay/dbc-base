@@ -2084,15 +2084,37 @@ function renderCOTable() {
 /* ════════════════════════════════
    COACH SCHEDULE PAGE（教練班表）
 ════════════════════════════════ */
-const CS_CACHE_KEY    = 'dbc_coach_v2';
-const CS_CACHE_TTL    = 15 * 60 * 1000;
-const CS_COL_DAY      = 50;     // 每日欄寬
-const CS_SEASON_START = 9;      // 9月後算 2026 年；否則 2027 年
+const CS_CACHE_KEY     = 'dbc_coach_v2';
+const CS_CACHE_TTL     = 15 * 60 * 1000;
+const CS_COL_DAY       = 50;
+const CS_SEASON_START  = 9;
+const CS_VER_KEY       = 'dbc_coach_ver';
+const CS_VER_URL       = './coach_version.json';
+
+/* 檢查班表是否有新版本（管理員手動 push 後）；若有則清 cache */
+async function ensureCoachLatest() {
+  try {
+    const res = await fetch(CS_VER_URL + '?t=' + Date.now(), {cache:'no-store'});
+    if (!res.ok) return;
+    const d = await res.json();
+    const localVer = localStorage.getItem(CS_VER_KEY) || '';
+    if (d.version && d.version !== localVer) {
+      /* 班表已被管理員更新 → 清教練班表 / 我的班表的 cache */
+      try {
+        localStorage.removeItem(CS_CACHE_KEY);
+        localStorage.removeItem(CS_CACHE_KEY + '_ts');
+      } catch(e) {}
+      localStorage.setItem(CS_VER_KEY, d.version);
+      csRawRows = null; csColors = null;
+    }
+  } catch(e) {}
+}
 
 let csRawRows = null;
 let csColors  = null;
 
-function renderCoach() {
+async function renderCoach() {
+  await ensureCoachLatest();
   const pc = document.getElementById('page-content');
   pc.className = 'cs-page';
   pc.innerHTML = `
@@ -2344,6 +2366,7 @@ let myScheduleMonths = [];   // ["2026-12", "2027-1", ...]
 let myScheduleMonth  = null;
 
 async function renderMySchedule() {
+  await ensureCoachLatest();
   const pc = document.getElementById('page-content');
   pc.className = 'mys-page';
   const coachName = currentUser?.coachName || '';

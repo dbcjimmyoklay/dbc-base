@@ -18,8 +18,7 @@ BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 PYTHON       = sys.executable   # 用同一個 python.exe
 PORTAL_URL   = 'https://dbcjimmyoklay.github.io/dbc-base/portal/'
 DBC_BASE_URL = 'https://docs.google.com/spreadsheets/d/12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc/'
-COACH_URL    = 'https://docs.google.com/spreadsheets/d/12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc/edit?gid=583313937'
-BOOKING_URL  = 'https://docs.google.com/spreadsheets/d/1eNXXQgCEqHxd2VmzbGe3Z-Gac2PNBgQlSAKx19uqQ6s/'
+COACH_VER_PATH = os.path.join(BASE_DIR, 'portal', 'coach_version.json')
 
 # ── 顏色（與 Portal 一致）──
 BG0  = '#000b18'
@@ -83,12 +82,12 @@ class Launcher(tk.Tk):
                     self.open_dbc_base, 1, 1)
 
         self._mkbtn(btns, '🎿  班表更新',
-                    '開啟教練班表分頁編輯',
-                    self.open_coach, 2, 0)
+                    '通知 Portal 強制刷新教練班表',
+                    self.publish_coach, 2, 0)
 
         self._mkbtn(btns, '🏨  訂房表更新',
-                    '開啟野澤訂房表編輯',
-                    self.open_booking, 2, 1)
+                    '比對野澤訂房表 → 更新入住單與課程安排',
+                    self.run_checkin, 2, 1)
 
         # Status
         self.status = tk.Label(self, text='閒置 ✓', font=self.f_sub,
@@ -258,13 +257,20 @@ class Launcher(tk.Tk):
         webbrowser.open(DBC_BASE_URL)
         self._log(f'📊 已開啟 DBC Base 試算表\n', 'dim')
 
-    def open_coach(self):
-        webbrowser.open(COACH_URL)
-        self._log(f'🎿 已開啟教練班表\n', 'dim')
-
-    def open_booking(self):
-        webbrowser.open(BOOKING_URL)
-        self._log(f'🏨 已開啟野澤訂房表\n', 'dim')
+    def publish_coach(self):
+        """產生新的版本標記，git push 後 Portal 端會自動清快取重抓"""
+        import json
+        ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+        try:
+            os.makedirs(os.path.dirname(COACH_VER_PATH), exist_ok=True)
+            with open(COACH_VER_PATH, 'w', encoding='utf-8') as f:
+                json.dump({'version': ts, 'updated': datetime.now().isoformat(timespec='minutes')},
+                          f, ensure_ascii=False)
+            self._log(f'✓ 已產生新版本標記 {ts}\n', 'ok')
+        except Exception as e:
+            self._log(f'✗ 無法寫入 coach_version.json：{e}\n', 'ng')
+            return
+        self._chain_push(f'班表更新 {ts}')
 
 
 if __name__ == '__main__':
