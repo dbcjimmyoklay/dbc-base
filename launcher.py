@@ -14,9 +14,10 @@ from tkinter import scrolledtext, font as tkfont
 from datetime import datetime
 import webbrowser
 
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-PYTHON    = sys.executable   # 用同一個 python.exe
-PORTAL_URL = 'https://dbcjimmyoklay.github.io/dbc-base/portal/'
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+PYTHON      = sys.executable   # 用同一個 python.exe
+PORTAL_URL  = 'https://dbcjimmyoklay.github.io/dbc-base/portal/'
+DBC_BASE_URL = 'https://docs.google.com/spreadsheets/d/12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc/'
 
 # ── 顏色（與 Portal 一致）──
 BG0  = '#000b18'
@@ -71,21 +72,17 @@ class Launcher(tk.Tk):
                     '清洗 → 寫入 Google Sheets → 銷量分析 → 推 Portal',
                     self.run_daily, 0, 0, colspan=2, primary=True)
 
-        self._mkbtn(btns, '🏨  訂房表更新後',
+        self._mkbtn(btns, '🏨  野澤訂房表更新後',
                     '把旅館名稱寫入入住單與課程安排',
-                    self.run_checkin, 1, 0)
-
-        self._mkbtn(btns, '📤  推 Portal 更新',
-                    '手動 git push（銷量分析、portal 變更）',
-                    self.run_push, 1, 1)
-
-        self._mkbtn(btns, '📊  只跑銷量分析',
-                    '更新本季 + 跨年比較資料',
-                    self.run_sales, 2, 0)
+                    self.run_checkin, 1, 0, colspan=2)
 
         self._mkbtn(btns, '🌐  開啟 Portal',
                     '在瀏覽器開啟 DBC Portal',
-                    self.open_portal, 2, 1)
+                    self.open_portal, 2, 0)
+
+        self._mkbtn(btns, '📊  開啟 DBC Base',
+                    '開啟主 Google 試算表',
+                    self.open_dbc_base, 2, 1)
 
         # Status
         self.status = tk.Label(self, text='閒置 ✓', font=self.f_sub,
@@ -251,20 +248,13 @@ class Launcher(tk.Tk):
         self._run_cmd_async('main.py --checkin',
             [PYTHON, 'main.py', '--checkin'], final=True)
 
-    def run_sales(self):
-        def after_run(success):
-            if not success:
-                return
-            self._chain_push(f'銷量更新 {datetime.now():%Y-%m-%d %H:%M}')
-        self._run_cmd_async('main.py --sales',
-            [PYTHON, 'main.py', '--sales'], then=after_run)
-
-    def run_push(self):
-        self._chain_push(f'更新 {datetime.now():%Y-%m-%d %H:%M}')
-
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
-        self._log(f'🌐 已開啟 {PORTAL_URL}\n', 'dim')
+        self._log(f'🌐 已開啟 Portal\n', 'dim')
+
+    def open_dbc_base(self):
+        webbrowser.open(DBC_BASE_URL)
+        self._log(f'📊 已開啟 DBC Base 試算表\n', 'dim')
 
 
 if __name__ == '__main__':
