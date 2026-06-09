@@ -14,10 +14,12 @@ from tkinter import scrolledtext, font as tkfont
 from datetime import datetime
 import webbrowser
 
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-PYTHON      = sys.executable   # 用同一個 python.exe
-PORTAL_URL  = 'https://dbcjimmyoklay.github.io/dbc-base/portal/'
+BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
+PYTHON       = sys.executable   # 用同一個 python.exe
+PORTAL_URL   = 'https://dbcjimmyoklay.github.io/dbc-base/portal/'
 DBC_BASE_URL = 'https://docs.google.com/spreadsheets/d/12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc/'
+COACH_URL    = 'https://docs.google.com/spreadsheets/d/12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc/edit?gid=583313937'
+BOOKING_URL  = 'https://docs.google.com/spreadsheets/d/1eNXXQgCEqHxd2VmzbGe3Z-Gac2PNBgQlSAKx19uqQ6s/'
 
 # ── 顏色（與 Portal 一致）──
 BG0  = '#000b18'
@@ -72,17 +74,21 @@ class Launcher(tk.Tk):
                     '清洗 → 寫入 Google Sheets → 銷量分析 → 推 Portal',
                     self.run_daily, 0, 0, colspan=2, primary=True)
 
-        self._mkbtn(btns, '🏨  野澤訂房表更新後',
-                    '把旅館名稱寫入入住單與課程安排',
-                    self.run_checkin, 1, 0, colspan=2)
-
         self._mkbtn(btns, '🌐  開啟 Portal',
                     '在瀏覽器開啟 DBC Portal',
-                    self.open_portal, 2, 0)
+                    self.open_portal, 1, 0)
 
         self._mkbtn(btns, '📊  開啟 DBC Base',
                     '開啟主 Google 試算表',
-                    self.open_dbc_base, 2, 1)
+                    self.open_dbc_base, 1, 1)
+
+        self._mkbtn(btns, '🎿  班表更新',
+                    '開啟教練班表分頁編輯',
+                    self.open_coach, 2, 0)
+
+        self._mkbtn(btns, '🏨  訂房表更新',
+                    '開啟野澤訂房表編輯',
+                    self.open_booking, 2, 1)
 
         # Status
         self.status = tk.Label(self, text='閒置 ✓', font=self.f_sub,
@@ -244,10 +250,6 @@ class Launcher(tk.Tk):
         self._run_cmd_async('main.py --all',
             [PYTHON, 'main.py', '--all'], then=after_main)
 
-    def run_checkin(self):
-        self._run_cmd_async('main.py --checkin',
-            [PYTHON, 'main.py', '--checkin'], final=True)
-
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
         self._log(f'🌐 已開啟 Portal\n', 'dim')
@@ -255,6 +257,14 @@ class Launcher(tk.Tk):
     def open_dbc_base(self):
         webbrowser.open(DBC_BASE_URL)
         self._log(f'📊 已開啟 DBC Base 試算表\n', 'dim')
+
+    def open_coach(self):
+        webbrowser.open(COACH_URL)
+        self._log(f'🎿 已開啟教練班表\n', 'dim')
+
+    def open_booking(self):
+        webbrowser.open(BOOKING_URL)
+        self._log(f'🏨 已開啟野澤訂房表\n', 'dim')
 
 
 if __name__ == '__main__':
