@@ -249,6 +249,10 @@ class Launcher(tk.Tk):
         self._run_cmd_async('main.py --all',
             [PYTHON, 'main.py', '--all'], then=after_main)
 
+    def run_checkin(self):
+        self._run_cmd_async('main.py --checkin',
+            [PYTHON, 'main.py', '--checkin'], final=True)
+
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
         self._log(f'🌐 已開啟 Portal\n', 'dim')
