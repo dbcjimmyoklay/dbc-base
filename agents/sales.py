@@ -494,20 +494,36 @@ def _to_season_day(d, season_start_month=5):
     return (d - season_start).days
 
 
-def compute_yoy(current_df, historical_dfs, historical_seasons):
+def _to_day_in_season(d, season_label, season_start_month=5):
+    """報名日期 → 指定雪季的開賣後第幾天
+    season_label: '25/26' 等
+    5/1 之前的早鳥報名 → 歸到 day 0
+    """
+    if pd.isna(d): return None
+    try:
+        yy = int(str(season_label).split('/')[0]) + 2000
+    except (ValueError, IndexError):
+        return _to_season_day(d, season_start_month)
+    season_start = pd.Timestamp(yy, season_start_month, 1)
+    delta = (d - season_start).days
+    return max(0, delta)   # 早鳥（< 5/1）全部歸 day 0
+
+
+def compute_yoy(current_df, historical_dfs, historical_seasons, current_season):
     """
     產生與每個歷年的對比：
-    - 同檔期累積：兩條線都截到本季當前累積天數（X 軸 = 雪季第 N 天，5/1 起算）
+    - 同檔期累積：兩條線都截到本季當前累積天數（X 軸 = 開賣後第 N 天，5/1 起算）
+      （5/1 之前的早鳥報名 → 全部歸到 day 0）
     - 同日比：按雪季月份排序（5→12→1→4），出發日同 月/日 對照
     回傳：{ cur_max_day: int, comparisons: [ {season, prev_total, same_period, same_date}, ... ] }
     """
     if not historical_dfs:
         return None
 
-    # ── 本季資料預處理 ──
+    # ── 本季資料預處理（用正確的雪季 5/1 為 day 0） ──
     cur_signup_days = (
         pd.to_datetime(current_df['報名日期'], errors='coerce')
-          .dropna().apply(_to_season_day)
+          .dropna().apply(lambda d: _to_day_in_season(d, current_season))
     )
     cur_days_count = cur_signup_days.value_counts().sort_index()
     cur_max_day = int(cur_days_count.index.max()) if len(cur_days_count) else 0
@@ -526,9 +542,10 @@ def compute_yoy(current_df, historical_dfs, historical_seasons):
 
     comparisons = []
     for hist_df, season in zip(historical_dfs, historical_seasons):
+        # 用該歷年雪季的 5/1 為 day 0（早於 5/1 的早鳥 → 全部歸 day 0）
         prev_signup_days = (
             pd.to_datetime(hist_df['報名日期'], errors='coerce')
-              .dropna().apply(_to_season_day)
+              .dropna().apply(lambda d: _to_day_in_season(d, season))
         )
         prev_days_count = prev_signup_days.value_counts().sort_index()
         prev_total = int(prev_days_count.sum())
@@ -624,7 +641,7 @@ def run():
     print(f"  跨年總次數 >= 2 的旅客：{len(returning['customers'])} 位")
 
     print("計算 YoY 對比...")
-    yoy = compute_yoy(current_df, historical_dfs, historical_seasons)
+    yoy = compute_yoy(current_df, historical_dfs, historical_seasons, current_season)
 
     # current_season 已於 compute_returning 前推算
 
