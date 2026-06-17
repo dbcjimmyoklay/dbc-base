@@ -258,6 +258,15 @@ def _write_change_log(sh, ws_change, change_logs):
     # 追加位置
     next_row   = len(existing_change) + 1
     start_row  = next_row
+    end_row    = next_row + len(change_logs) - 1
+
+    # 若試算表列數不夠 → 自動擴增（每次多加 500 列緩衝）
+    cur_rows = ws_change.row_count
+    if end_row > cur_rows:
+        new_rows = end_row + 500
+        ws_change.add_rows(new_rows - cur_rows)
+        print(f"  異動紀錄已擴增至 {new_rows} 列")
+
     ws_change.update(change_logs, f'A{next_row}', value_input_option='RAW')
     print(f"  OK 寫入 {len(change_logs)} 筆異動記錄")
 
