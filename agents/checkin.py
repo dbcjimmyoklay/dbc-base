@@ -207,14 +207,20 @@ def _build_checkin_rows(all_sheet_rows, include_fn, existing_ci_map,
         en         = r.get('英文姓名', '')
         visitor_id = r.get('旅客編號', '')
 
-        ci_key = f"v_{visitor_id}" if visitor_id else f"{ding}_{cn}"
-        bk_key = f"{ding}_{cn}"    if cn          else f"{ding}_en_{en}"
+        # 兩種 key 都試（入住單可能無「旅客編號」欄 → 舊資料只能用 訂編_姓名 key）
+        ci_key_v  = f"v_{visitor_id}" if visitor_id else None
+        ci_key_dn = f"{ding}_{cn}"    if cn          else None
+        bk_key    = f"{ding}_{cn}"    if cn          else f"{ding}_en_{en}"
 
         r_out = dict(r)
 
-        # 保留手動欄位
-        if ci_key in existing_ci_map:
-            old = existing_ci_map[ci_key]
+        # 保留手動欄位（先試 v_visitor_id，再試 ding_cn）
+        old = None
+        if ci_key_v and ci_key_v in existing_ci_map:
+            old = existing_ci_map[ci_key_v]
+        elif ci_key_dn and ci_key_dn in existing_ci_map:
+            old = existing_ci_map[ci_key_dn]
+        if old:
             for mc in CHECKIN_MANUAL_COLS:
                 if mc in old and old[mc]:
                     r_out[mc] = old[mc]
