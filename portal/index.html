@@ -1672,7 +1672,8 @@ function ciIsSep(row) {
   return false;
 }
 
-function renderCheckin(area) {
+async function renderCheckin(area) {
+  await ensureCheckinLatest();
   ciCurArea = area;
   const pc = document.getElementById('page-content');
   pc.className = 'course-page';
@@ -1888,7 +1889,8 @@ function coIsSep(row) {
   return false;
 }
 
-function renderCheckout(area) {
+async function renderCheckout(area) {
+  await ensureCheckinLatest();
   coCurArea = area;
   const pc    = document.getElementById('page-content');
   pc.className = 'course-page';
@@ -2106,6 +2108,29 @@ async function ensureCoachLatest() {
       } catch(e) {}
       localStorage.setItem(CS_VER_KEY, d.version);
       csRawRows = null; csColors = null;
+    }
+  } catch(e) {}
+}
+
+/* 檢查入住單版本（CHECKIN 跑完會更新標記）；若有新版則清入住單與送客單 cache */
+const CI_VER_KEY = 'dbc_checkin_ver';
+const CI_VER_URL = './checkin_version.json';
+async function ensureCheckinLatest() {
+  try {
+    const res = await fetch(CI_VER_URL + '?t=' + Date.now(), {cache:'no-store'});
+    if (!res.ok) return;
+    const d = await res.json();
+    const localVer = localStorage.getItem(CI_VER_KEY) || '';
+    if (d.version && d.version !== localVer) {
+      /* 清三區入住單 + 送客單 cache（送客單直接讀入住單資料）*/
+      for (const area of ['nozawa','madarao','yongpyong']) {
+        try {
+          localStorage.removeItem('dbc_ci_' + area);
+          localStorage.removeItem('dbc_ci_' + area + '_ts');
+        } catch(e) {}
+      }
+      localStorage.setItem(CI_VER_KEY, d.version);
+      ciRawRows = {}; coRawRows = {};
     }
   } catch(e) {}
 }

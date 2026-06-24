@@ -472,6 +472,21 @@ def _writeback_to_course(sh, ws_course, booking_info_map):
 # 主函數
 # ═══════════════════════════════════════════
 
+def _write_version_marker():
+    """更新 portal/checkin_version.json，讓 Portal 入住單/送客單頁面強制刷新 cache"""
+    import json
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ver_path = os.path.join(BASE_DIR, 'portal', 'checkin_version.json')
+    ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+    try:
+        with open(ver_path, 'w', encoding='utf-8') as f:
+            json.dump({'version': ts, 'updated': datetime.now().isoformat(timespec='minutes')},
+                      f, ensure_ascii=False)
+        print(f"  OK 已更新版本標記 → portal/checkin_version.json")
+    except Exception as e:
+        print(f"  ⚠️ 寫入版本標記失敗（不影響主流程）：{e}")
+
+
 def run(cleaner_output=None):
     print("=" * 50)
     print("CHECKIN 入住員 啟動")
@@ -503,6 +518,9 @@ def run(cleaner_output=None):
     print("\n[Step 3] 回寫課程安排...")
     ws_course = sh.worksheet(SHEET_COURSE)
     _writeback_to_course(sh, ws_course, booking_info_map)
+
+    # 更新 Portal 版本標記（讓入住單/送客單頁面強制刷新 cache）
+    _write_version_marker()
 
     print(f"\n{'=' * 50}")
     print(f"CHECKIN 完成！{datetime.now().strftime('%Y/%m/%d %H:%M')}")

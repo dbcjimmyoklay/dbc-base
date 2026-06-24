@@ -250,8 +250,14 @@ class Launcher(tk.Tk):
             [PYTHON, 'main.py', '--all'], then=after_main)
 
     def run_checkin(self):
+        def after_checkin(success):
+            if not success:
+                self._set_status('✗ CHECKIN 失敗，停止', NG_C)
+                return
+            # 推送版本標記讓 Portal 入住單/送客單頁面強制刷新 cache
+            self._chain_push(f'入住單更新 {datetime.now():%Y-%m-%d %H:%M}')
         self._run_cmd_async('main.py --checkin',
-            [PYTHON, 'main.py', '--checkin'], final=True)
+            [PYTHON, 'main.py', '--checkin'], then=after_checkin)
 
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
