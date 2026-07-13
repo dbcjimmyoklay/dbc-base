@@ -172,7 +172,7 @@ CHECKIN_COLS = [
 #  5=中文姓名  6=英文姓名  7=性別  8=年齡
 #  9=房號  10=房型  11=序號  12=分房備註  13=入住備註  14=退房備註  15=飲食  16=OP備註
 CHECKIN_HEADERS     = CHECKIN_COLS
-CHECKIN_MANUAL_COLS = {'房號', '房型', '序號', '入住備註', '退房備註'}
+CHECKIN_MANUAL_COLS = {'房型', '序號', '入住備註', '退房備註'}   # 房號跟隨科威原始資料自動更新，不保護
 CHECKIN_IMPORTANT_COLS = {'出發日期', '泊數', '天數', '項目'}
 CHECKIN_CENTER_COLS = {
     '項目', '出發日期', '泊數', '訂編',
