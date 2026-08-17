@@ -201,9 +201,22 @@ def run_daily(skip_watcher=False, skip_reporter=False):
 
 
 def run_checkin():
-    """手動觸發流程（填完野澤訂房表後執行）"""
+    """
+    手動觸發流程（填完野澤訂房表後執行）
+    為確保資料一定是最新的（不使用過期的 cleaner_output.pkl 快取），
+    這裡會先重跑 CLEANER + COURSE，再進行 CHECKIN 訂房比對與寫入。
+    """
+    from agents.cleaner import run as cleaner_run
+    from agents.course  import run as course_run
     from agents.checkin import run as checkin_run
-    run_agent('CHECKIN 入住員', checkin_run)
+
+    ok, cleaner_output, _ = run_agent('CLEANER 清洗員（重新讀取最新大總表）', cleaner_run)
+    if not ok:
+        print("\n[STOP] CLEANER 失敗，中止後續流程")
+        return
+
+    run_agent('COURSE 課程安排寫入員', course_run, cleaner_output)
+    run_agent('CHECKIN 入住員', checkin_run, cleaner_output)
 
 
 # ═══════════════════════════════════════════

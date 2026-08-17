@@ -86,7 +86,7 @@ class Launcher(tk.Tk):
                     self.publish_coach, 2, 0)
 
         self._mkbtn(btns, '🏨  訂房表更新',
-                    '比對野澤訂房表 → 更新入住單與課程安排',
+                    '重新讀取最新大總表 → 更新課程安排/入住單',
                     self.run_checkin, 2, 1)
 
         # Status
