@@ -205,6 +205,7 @@ def run_checkin():
     手動觸發流程（填完野澤訂房表後執行）
     為確保資料一定是最新的（不使用過期的 cleaner_output.pkl 快取），
     這裡會先重跑 CLEANER + COURSE，再進行 CHECKIN 訂房比對與寫入。
+    回傳 True/False：任何一步失敗都算失敗（避免靜默吞錯）。
     """
     from agents.cleaner import run as cleaner_run
     from agents.course  import run as course_run
@@ -213,10 +214,11 @@ def run_checkin():
     ok, cleaner_output, _ = run_agent('CLEANER 清洗員（重新讀取最新大總表）', cleaner_run)
     if not ok:
         print("\n[STOP] CLEANER 失敗，中止後續流程")
-        return
+        return False
 
-    run_agent('COURSE 課程安排寫入員', course_run, cleaner_output)
-    run_agent('CHECKIN 入住員', checkin_run, cleaner_output)
+    ok_course,  _, _ = run_agent('COURSE 課程安排寫入員', course_run, cleaner_output)
+    ok_checkin, _, _ = run_agent('CHECKIN 入住員', checkin_run, cleaner_output)
+    return ok_course and ok_checkin
 
 
 # ═══════════════════════════════════════════
@@ -266,8 +268,8 @@ def main():
         return
 
     if args.checkin:
-        run_checkin()
-        return
+        ok = run_checkin()
+        sys.exit(0 if ok else 1)
 
     if args.checkout:
         run_checkout()
@@ -283,15 +285,28 @@ def main():
             skip_watcher  = args.skip_watcher,
             skip_reporter = args.skip_reporter,
         )
+        checkin_ok = True
         if results.get('cleaner'):
-            run_checkin()
-        return
+            checkin_ok = run_checkin()
+        else:
+            checkin_ok = False
+
+        # 關鍵步驟（清洗＋課程安排＋入住單）任何一個失敗，整體視為失敗
+        # WATCHER/REPORTER/SALES 失敗仍會提醒，但不視為阻斷性錯誤
+        critical_ok = results.get('cleaner', False) and results.get('course', False) and checkin_ok
+        if not critical_ok:
+            print("\n" + "!" * 50)
+            print("⚠️  今日流程有關鍵步驟失敗！請往上捲動查看紅字「NG」訊息並修正")
+            print("!" * 50 + "\n")
+        sys.exit(0 if critical_ok else 1)
 
     # ── 預設：每日自動流程 ──
-    run_daily(
+    results = run_daily(
         skip_watcher  = args.skip_watcher,
         skip_reporter = args.skip_reporter,
     )
+    critical_ok = results.get('cleaner', False) and results.get('course', False)
+    sys.exit(0 if critical_ok else 1)
 
 
 if __name__ == '__main__':
