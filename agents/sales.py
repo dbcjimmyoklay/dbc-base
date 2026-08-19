@@ -58,7 +58,8 @@ def find_xlsx_files():
         else:
             current_candidates.append(f)
 
-    current = max(current_candidates, key=os.path.getmtime) if current_candidates else None
+    from shared.utils import file_sort_key
+    current = max(current_candidates, key=file_sort_key) if current_candidates else None
     historical.sort(key=lambda x: x[0])
     return current, historical
 

@@ -318,6 +318,33 @@ def classify_cols(cols):
     return pure, excl, with_, without_, four, rent, keep_city
 
 
+# ===== 檔案選擇（原始大總表*.xlsx）=====
+
+def file_sort_key(path):
+    """
+    判斷「哪個原始大總表檔案最新」的排序 key。
+    優先使用檔名裡的日期（如 原始大總表0819.xlsx → 08/19），
+    只有在檔名無法解析時才退回用檔案修改時間（mtime）。
+
+    原因：瀏覽器下載檔案時，有時會保留伺服器的 Last-Modified 標頭
+    而非「實際下載時間」，單靠 mtime 判斷最新檔案並不可靠，
+    曾造成系統誤用舊檔案跑出過期資料的問題。
+
+    雪季以 7 月為切分點：8~12 月視為早半季，1~6 月視為晚半季（隔年），
+    避免跨年比較（例如 12月 vs 隔年1月）時順序顛倒。
+    """
+    import re as _re
+    import os as _os
+
+    m = _re.search(r'原始大總表(\d{2})(\d{2})\.xlsx$', _os.path.basename(path))
+    if m:
+        mm, dd = int(m.group(1)), int(m.group(2))
+        if 1 <= mm <= 12 and 1 <= dd <= 31:
+            season_bucket = 0 if mm >= 7 else 1
+            return (1, (season_bucket, mm, dd), _os.path.getmtime(path))
+    return (0, (0, 0, 0), _os.path.getmtime(path))
+
+
 # ===== 比對 Key =====
 
 def build_record_key(r, seq=None):
