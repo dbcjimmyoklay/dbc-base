@@ -75,6 +75,34 @@ def run():
     def _is_current(p):
         return _re.search(r'原始大總表\d\d-\d\d\.xlsx$', os.path.basename(p)) is None
 
+    def _filename_date_key(p):
+        """
+        從檔名解析 MMDD（如 原始大總表0819.xlsx → 08/19），回傳可排序的 key。
+        雪季以 7 月為切分點：8~12 月視為早半季，1~6 月視為晚半季（隔年），
+        避免跨年（例如 12月 vs 1月）比較時順序顛倒。
+        解析失敗回傳 None（該檔案會退回用檔案修改時間排序，僅作為保底機制）。
+        """
+        m = _re.search(r'原始大總表(\d{2})(\d{2})\.xlsx$', os.path.basename(p))
+        if not m:
+            return None
+        mm, dd = int(m.group(1)), int(m.group(2))
+        if not (1 <= mm <= 12 and 1 <= dd <= 31):
+            return None
+        season_bucket = 0 if mm >= 7 else 1   # 8~12月=0（早）、1~6月=1（晚，隔年）
+        return (season_bucket, mm, dd)
+
+    def _file_sort_key(p):
+        """
+        排序依據：優先用「檔名裡的日期」判斷新舊（使用者下載時手動命名，最可靠）。
+        只有在檔名無法解析時，才退回用檔案修改時間（mtime）——
+        因為瀏覽器下載有時會保留伺服器的 Last-Modified 標頭，而非真正下載時間，
+        單靠 mtime 判斷「最新檔案」不可靠，過去已造成誤用舊檔案的問題。
+        """
+        fkey = _filename_date_key(p)
+        if fkey is not None:
+            return (1, fkey, os.path.getmtime(p))
+        return (0, (0, 0, 0), os.path.getmtime(p))
+
     files = [f for f in glob.glob(os.path.join(BASE_DIR, '原始大總表*.xlsx')) if _is_current(f)]
     if not files:
         print("本機找不到原始大總表*.xlsx，嘗試從 Google Drive 下載...")
@@ -84,7 +112,11 @@ def run():
         if not files:
             raise FileNotFoundError("Google Drive 下載後仍找不到原始大總表*.xlsx")
 
-    latest_file = max(files, key=os.path.getmtime)
+    if len(files) > 1:
+        print(f"偵測到 {len(files)} 個候選檔案：{[os.path.basename(f) for f in files]}")
+        print("  （依檔名日期排序選擇最新；建議每次跑完流程後將舊檔移出資料夾，避免混淆）")
+
+    latest_file = max(files, key=_file_sort_key)
     print(f"使用檔案：{os.path.basename(latest_file)}")
 
     # ── 2. 讀取 xlsx ──
