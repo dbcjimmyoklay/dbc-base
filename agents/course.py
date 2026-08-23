@@ -256,6 +256,20 @@ def run(cleaner_output=None):
     print("重建篩選器...")
     rebuild_filter(sh, ws_course, len(write_rows) - 1, len(COURSE_COLS))
 
+    # ── 寫入後驗證：回頭讀取 Sheet，確認真的寫進去了 ──
+    # 防止 Google API 靜默部分失敗（例如 batch_update 中途出錯、
+    # 或前面步驟未拋出例外但實際沒寫完整），導致資料停留在舊狀態卻沒人發現。
+    print("驗證寫入結果...")
+    verify_map = _build_existing_map(ws_course)
+    verify_count = len(verify_map)
+    if verify_count < data_count * 0.9:   # 容許小幅誤差（去重、佔位資料等）
+        raise RuntimeError(
+            f"COURSE 寫入驗證失敗！預期寫入約 {data_count} 筆，"
+            f"但回頭讀取 Sheet 只看到 {verify_count} 筆。"
+            f"Google Sheets 可能沒有真的更新成功，請重新執行。"
+        )
+    print(f"  OK 驗證通過（Sheet 上實際有 {verify_count} 筆）")
+
     print(f"\n{'=' * 50}")
     print(f"COURSE 完成！共 {data_count} 筆  {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     print(f"{'=' * 50}\n")
