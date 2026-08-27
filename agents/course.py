@@ -96,7 +96,12 @@ def _build_write_rows(all_sheet_rows, existing_map):
             write_rows.append(item['_data'])
             continue
 
-        r = item['_data']
+        # ⚠️ 這裡一定要淺複製（dict(...)），不能直接用 item['_data'] 的參照！
+        # all_sheet_rows 是跟 CHECKIN／WATCHER／SALES 等其他工作員共用的同一份
+        # cleaner_output 記憶體物件。若直接修改原始 dict，下面對「項目」欄的
+        # 保護邏輯（改成旅館名稱）會外溢污染到後面才執行的 CHECKIN，
+        # 導致已經配好房的訂單反而在 CHECKIN 被誤判排除（項目不再含地區名稱）。
+        r = dict(item['_data'])
 
         # 空列（無資料日期）
         if not r.get('訂編', ''):
@@ -108,7 +113,7 @@ def _build_write_rows(all_sheet_rows, existing_map):
         if key in existing_map:
             old = existing_map[key]
 
-            # 保留手動欄位
+            # 保留手動欄位（僅影響本次寫入 Sheet 的副本，不影響共用資料）
             for mc in MANUAL_COLS:
                 if mc in old and old[mc]:
                     r[mc] = old[mc]
