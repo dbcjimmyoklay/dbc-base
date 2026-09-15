@@ -2713,15 +2713,19 @@ function dcrCalcDaily(courseRows) {
   return daily;
 }
 
-function dcrCalcCoaches(d) {
+/* 每位教練可帶人數（依地區）：龍平 1班4人，其餘 1班6人（不可調整其他地區） */
+const DCR_GROUP_SIZE = {'野澤':6, '斑尾':6, '湯澤':6, '龍平':4};
+
+function dcrCalcCoaches(d, area) {
+  const perGroup = DCR_GROUP_SIZE[area] || 6;
   const g0   = d.g0   || 0;
   const g12  = d.g12  || 0;
   const g345 = d.g345 || 0;
   const pure = d.pureOrders ? d.pureOrders.size : 0;
   const team =
-    (g0   > 0 ? Math.ceil(g0  /6) : 0) +
-    (g12  > 0 ? Math.ceil(g12 /6) : 0) +
-    (g345 > 0 ? Math.ceil(g345/6) : 0);
+    (g0   > 0 ? Math.ceil(g0  /perGroup) : 0) +
+    (g12  > 0 ? Math.ceil(g12 /perGroup) : 0) +
+    (g345 > 0 ? Math.ceil(g345/perGroup) : 0);
   return { coaches: pure + team, pure, team, g0, g12, g345 };
 }
 
@@ -2746,7 +2750,7 @@ function dcrBuildRows(daily) {
     const row = { date: ds, wd, areas: {}, total_jp: 0, total_kr: 0, total: 0 };
     for (const area of DCR_AREAS) {
       const d = (daily[ds] && daily[ds][area]) || {};
-      const r = dcrCalcCoaches(d);
+      const r = dcrCalcCoaches(d, area);
       const color = dcrColor(area, r.coaches);
       row.areas[area] = { c: r.coaches, pure: r.pure, team: r.team, color, cap: DCR_CAPS[area] };
       if (area === '龍平') row.total_kr += r.coaches;
