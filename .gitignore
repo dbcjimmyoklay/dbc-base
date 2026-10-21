@@ -13,3 +13,8 @@ __pycache__/
 # 報表（每次重新產生）
 dbc_coach_report.html
 dbc_sales_report.html
+
+# 兩季比較頁面（含銷量資料，僅本機使用）
+yoy_compare.py
+yoy_template.html
+yoy_compare.html
