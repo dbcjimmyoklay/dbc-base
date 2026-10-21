@@ -105,7 +105,7 @@ def get_area(g):
     if 'ZN' in s: return '野澤'
     if 'ZB' in s: return '斑尾'
     if 'ZY' in s: return '湯澤'
-    if 'YS' in s: return '龍平'
+    if 'YS' in s or 'K-Y' in s: return '龍平'
     if 'NT' in s: return '野澤'
     if 'BT' in s: return '斑尾'
     if 'N'  in s: return '野澤'
