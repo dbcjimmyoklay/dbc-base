@@ -513,7 +513,35 @@ def _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders):
             '英文姓名': en_names,
             '佔位數'  : len(ph_list),
             '佔位姓名': '／'.join([n[0] for n in ph_list]),
+            '備註'    : f"原佔位：{'／'.join([n[0] for n in ph_list])}（{len(ph_list)}位）",
         })
+
+    # ── 區塊 3b：英文姓名補上（訂房表有真名但英文空白 → 新資料已有英文）──
+    for ding, info in order_info.items():
+        if ding not in new_by_ding:
+            continue
+        seen = set()
+        for row in info['rows']:
+            cn, en = row.get('中文姓名', ''), row.get('英文姓名', '')
+            if row.get('是佔位') or not cn or en or cn in seen:
+                continue
+            seen.add(cn)
+            match = [p for p in new_by_ding[ding]
+                     if str(p.get('中文姓名', '') or '').strip() == cn]
+            if not match:
+                continue
+            new_en = str(match[0].get('英文姓名', '') or '').strip()
+            if not new_en:
+                continue
+            missing_names.append({
+                '訂編'    : ding,
+                '出發日期': info.get('出發日期', ''),
+                '中文姓名': cn,
+                '英文姓名': new_en,
+                '佔位數'  : 0,
+                '佔位姓名': '',
+                '備註'    : '訂房表英文姓名空白 → 新資料已補上',
+            })
     missing_names.sort(key=lambda x: (x['出發日期'], x['訂編']))
 
     return new_orders, removed_orders, changes, missing_names
@@ -525,7 +553,7 @@ def _write_compare_report(sh_booking, new_orders, removed_orders, changes, missi
     新版三大區塊：
       ① 新增 / 刪減訂單
       ② 異動（出發日期 / 泊數 / 人數）
-      ③ 補資料（佔位姓名 → 真實姓名）
+      ③ 補資料（佔位姓名 → 真實姓名；訂房表英文姓名空白 → 新資料已補上）
     欄位：出發日期 / 泊數 / 天數 / 訂編 / 中文姓名 / 英文姓名 / 備註
     """
     print("  建立/更新 野澤訂房比對報告...")
@@ -646,7 +674,7 @@ def _write_compare_report(sh_booking, new_orders, removed_orders, changes, missi
     # ═══════════════════════════════════════════
     # 區塊 ③：補資料
     # ═══════════════════════════════════════════
-    _add_title('═══ ③ 補資料（訂房表佔位姓名 → 真實姓名）═══')
+    _add_title('═══ ③ 補資料（佔位姓名 → 真實姓名／英文姓名補上）═══')
     if missing_names:
         _add_header()
         prev_date = None
@@ -655,7 +683,7 @@ def _write_compare_report(sh_booking, new_orders, removed_orders, changes, missi
             dep = x.get('出發日期', '')
             cur_color = _date_color_key(prev_date, dep, cur_color)
             prev_date = dep
-            note = f"原佔位：{x['佔位姓名']}（{x['佔位數']}位）"
+            note = x.get('備註') or f"原佔位：{x['佔位姓名']}（{x['佔位數']}位）"
             _add_data(
                 [dep, '', '', x['訂編'], x['中文姓名'], x['英文姓名'], note],
                 cur_color,
