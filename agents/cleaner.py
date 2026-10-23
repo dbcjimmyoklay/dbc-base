@@ -19,6 +19,7 @@ CLEANER 清洗員
 """
 
 import os
+import re
 import glob
 import pickle
 import pandas as pd
@@ -35,7 +36,7 @@ try:
         get_item, get_weekday, extract_date_from_group,
         has_value, clean_val, clean_seq_no, safe_int, clean_order_no, clean_diet,
         normalize_level, classify_cols,
-        parse_op_days, parse_op_ratio,
+        parse_op_days, parse_op_ratio, pick_op, check_op_fee,
         infer_days_from_fee,
         build_record_key,
     )
@@ -50,10 +51,12 @@ except ImportError:
         get_item, get_weekday, extract_date_from_group,
         has_value, clean_val, clean_seq_no, safe_int, clean_order_no, clean_diet,
         normalize_level, classify_cols,
-        parse_op_days, parse_op_ratio,
+        parse_op_days, parse_op_ratio, pick_op, check_op_fee,
         infer_days_from_fee,
         build_record_key,
     )
+
+OP_FEE_ABS_TOL_TXT = '5,000 元'   # 與 shared/utils.py 的 OP_FEE_ABS_TOL 對應
 
 BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_PATH = os.path.join(BASE_DIR, 'cleaner_output.pkl')
@@ -137,35 +140,57 @@ def run():
 
     # ── 5. 純課程：OP 解析 + 費用反推 ──
     order_op_cache = {}
+    op_anomalies   = []
+    # 同團號所有列的 OP備註合併（科威 OP 只寫在該團第一列，含多張訂單的段落）
+    group_ops = {}
+    for gno, g in df.groupby('團號', sort=False):
+        texts = [str(v) for v in g['OP備註'].tolist() if isinstance(v, str) and v.strip()]
+        group_ops[gno] = '\n'.join(texts)
     for order_no, group in df.groupby('訂單編號', sort=False):
         first_row = group.iloc[0]
         item = get_item(first_row.get('團號', ''))
         if item not in PURE_ITEMS:
             continue
-        op          = first_row.get('OP備註', '')
+        op          = pick_op(first_row.get('OP備註', ''),
+                              group_ops.get(first_row.get('團號', ''), ''), order_no)
         days_val    = parse_op_days(op, order_no)
         ratio_val   = parse_op_ratio(op, order_no)
-        tiansu      = str(days_val) if days_val else ''
+        tiansu      = f"{days_val:g}" if days_val else ''   # 保留半天：1.5 → '1.5'、2.0 → '2'
         note        = ratio_val or ''
         is_excl     = any(has_value(first_row, c) for c in excl_cols)
 
+        members = []
+        for _, mrow in group.iterrows():
+            fee = safe_int(mrow.get('團費', 0))
+            if fee == '':
+                fee = 0
+            has_equip = {
+                '衣褲': any(has_value(mrow, c) for c in rent_cols['衣褲']),
+                '護膝': any(has_value(mrow, c) for c in rent_cols['護膝']),
+                '護臀': any(has_value(mrow, c) for c in rent_cols['護臀']),
+                '手套': any(has_value(mrow, c) for c in rent_cols['手套']),
+                '4件組': any(has_value(mrow, c) for c in four_cols),
+            }
+            members.append({'fee': fee, 'has_equip': has_equip})
+        group_date = extract_date_from_group(first_row.get('團號', ''))
+
         if is_excl:
             note = '專屬'
+        elif tiansu and ratio_val:
+            # 以 OP備註 為準；與團費計價差異過大 → 加 ⚠ 並列入異常清單（只標示，不改資料）
+            chk = check_op_fee(item, days_val, int(ratio_val[2:]), members,
+                               lesson_date=group_date, season_start_year=DATE_START.year)
+            if chk and chk[3]:
+                diff, expected, total, _ = chk
+                note = f"{note}⚠"
+                op_anomalies.append({
+                    '訂編': str(int(str(order_no).lstrip('0') or 0)), '項目': item,
+                    '團號': str(first_row.get('團號', '')), '人數': len(members),
+                    'OP天數': tiansu, 'OP師生比': ratio_val,
+                    '預期課程費': int(expected), '訂單團費合計': int(total),
+                    '扣租借後差額': int(diff),
+                })
         elif not tiansu:
-            members = []
-            for _, mrow in group.iterrows():
-                fee = safe_int(mrow.get('團費', 0))
-                if fee == '':
-                    fee = 0
-                has_equip = {
-                    '衣褲': any(has_value(mrow, c) for c in rent_cols['衣褲']),
-                    '護膝': any(has_value(mrow, c) for c in rent_cols['護膝']),
-                    '護臀': any(has_value(mrow, c) for c in rent_cols['護臀']),
-                    '手套': any(has_value(mrow, c) for c in rent_cols['手套']),
-                    '4件組': any(has_value(mrow, c) for c in four_cols),
-                }
-                members.append({'fee': fee, 'has_equip': has_equip})
-            group_date = extract_date_from_group(first_row.get('團號', ''))
             inferred_days, n_people = infer_days_from_fee(
                 item, members,
                 lesson_date=group_date,
@@ -226,7 +251,12 @@ def run():
                 tiansu = f"{total_days}無"
             else:
                 tiansu = str(total_days)
-            note = '專屬' if is_excl else ''
+            note = ''
+            if is_excl:
+                # 專屬教練師生比（1對2 / 1對3…）寫進註記，Portal 每日教練需求要用它算專屬教練人數
+                ratios = [m.group(1) for c in excl_cols if has_value(row, c)
+                          for m in [re.search(r'1\s*[對对]\s*(\d+)', str(c))] if m]
+                note = f"專屬1對{ratios[0]}" if ratios else '專屬'
 
         records.append({
             '_sort_date'   : sort_date,
@@ -335,8 +365,27 @@ def run():
 
     print(f"整理完成：{len(all_records_flat)} 筆資料，{len(date_map)} 個出發日期")
 
+    # ── 9.5 OP備註 vs 團費 異常清單（只標示，供人工確認）──
+    op_anomalies.sort(key=lambda a: -abs(a['扣租借後差額']))
+    report_path = os.path.join(BASE_DIR, 'OP費用異常清單.txt')
+    lines = [f"純課 OP備註與團費計價差異過大（> {OP_FEE_ABS_TOL_TXT} 且 > 預期 15%），共 {len(op_anomalies)} 張；"
+             f"課程安排「註記」欄已加 ⚠。資料一律以 OP備註 為準，請人工確認 OP 或團費是否有誤。",
+             f"產生時間：{datetime.now():%Y/%m/%d %H:%M}", '']
+    for a in op_anomalies:
+        lines.append(
+            f"#{a['訂編']} {a['項目']} {a['團號']} {a['人數']}人｜OP：{a['OP天數']}日 {a['OP師生比']}"
+            f"｜預期課程費 {a['預期課程費']:,}｜實收(訂單團費) {a['訂單團費合計']:,}"
+            f"｜扣租借後差額 {a['扣租借後差額']:+,}")
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    if op_anomalies:
+        print(f"\n⚠ OP備註與團費差異過大的純課訂單：{len(op_anomalies)} 張（詳見 OP費用異常清單.txt）")
+        for l in lines[3:]:
+            print('  ' + l)
+
     # ── 10. 序列化輸出 ──
     output = {
+        'op_anomalies'     : op_anomalies,
         'all_records_flat' : all_records_flat,
         'all_sheet_rows'   : all_sheet_rows,
         'date_map'         : dict(date_map),

@@ -181,7 +181,7 @@ def _apply_format(sh, ws_course, write_rows):
             reqs.append(req_cell_color(sid, i, IDX_TIAN + 1, COLOR['yellow_bright']))
 
         # 註記 = 專屬 → 亮黃
-        if IDX_ZHU >= 0 and row[IDX_ZHU].strip() == '專屬':
+        if IDX_ZHU >= 0 and row[IDX_ZHU].strip().startswith('專屬'):
             reqs.append(req_cell_color(sid, i, IDX_ZHU + 1, COLOR['yellow_bright']))
 
     total_rows = len(write_rows) + 1   # +1 因從第2列起算

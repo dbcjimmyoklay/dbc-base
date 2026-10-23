@@ -200,14 +200,71 @@ def parse_op_section(op, order_no):
     return m.group() if m else text
 
 
+def op_has_section(op, order_no):
+    """OP備註文字裡是否有這張訂單自己的 #訂單編號 段落"""
+    if not op or pd.isna(op):
+        return False
+    try:
+        ono = str(int(str(order_no).lstrip('0')))
+    except Exception:
+        ono = str(order_no)
+    return bool(re.search(rf'#\s*0*{re.escape(ono)}\b', cn_to_num(str(op))))
+
+
+def pick_op(own_op, group_op, order_no):
+    """科威把整個團號的 OP備註全放在該團第一列（內含多張訂單的 #段落）。
+    訂單自己第一列沒有自己的段落時，改從同團號合併的 OP備註找。"""
+    if op_has_section(own_op, order_no):
+        return own_op
+    if op_has_section(group_op, order_no):
+        return group_op
+    return own_op
+
+
 def parse_op_days(op, order_no):
-    """從 OP備註解析上課天數"""
+    """從 OP備註解析上課天數（保留半天，例如 1.5、2.5；整數回傳 int）"""
     s = parse_op_section(op, order_no)
-    for pat in [r'共\s*(\d+)\s*[日天晚泊]', r'上課\s*(\d+)\s*[日天]', r'(\d+)\s*[日天]\s*課程']:
+    for pat in [r'共\s*(\d+(?:\.\d+)?)\s*[日天晚泊]', r'上課\s*(\d+(?:\.\d+)?)\s*[日天]',
+                r'(\d+(?:\.\d+)?)\s*[日天]\s*課程']:
         m = re.search(pat, s)
         if m:
-            return int(m.group(1))
+            v = float(m.group(1))
+            return int(v) if v.is_integer() else v
     return None
+
+
+# OP備註天數/師生比 vs 團費 的一致性檢查（OP 為準，差異過大只標示、不改資料）
+OP_FEE_ABS_TOL = 5000     # 差額超過此金額
+OP_FEE_PCT_TOL = 0.15     # 且超過預期課程費的此比例，才視為異常
+
+
+def check_op_fee(item, days, ratio, members, lesson_date=None, season_start_year=2026):
+    """
+    以 OP 的天數/師生比算預期課程費 =（單日價 + 湯澤旺季加價）× 天數，
+    與實收（訂單團費合計 − 租借裝備）比較。裝備租借日數不一定等於上課日數，
+    所以對每種裝備的租借日數（0~7）取最接近的組合。
+    回傳 (差額, 預期課程費, 訂單團費合計, is_anomaly)；查不到價目回傳 None。
+    """
+    import itertools
+    price = PRICE_TABLE.get(item, {}).get(ratio)
+    if not price or not days:
+        return None
+    sur = (get_yukiguni_surcharge(lesson_date, season_start_year)
+           if item == '湯澤純課' and lesson_date else 0)
+    expected = (price + sur) * days
+    total = sum(m['fee'] for m in members)
+    cnt = {k: sum(1 for m in members if m['has_equip'].get(k)) for k in EQUIP_PRICE}
+    flat = cnt.get('手套', 0) * EQUIP_PRICE['手套']
+    per_day = [(k, cnt[k] * EQUIP_PRICE[k]) for k in ('衣褲', '護膝', '護臀', '4件組') if cnt.get(k)]
+    best = None
+    for dys in itertools.product(range(8), repeat=len(per_day)):
+        eq = flat + sum(d * p for d, (_, p) in zip(dys, per_day))
+        diff = total - eq - expected
+        if best is None or abs(diff) < abs(best):
+            best = diff
+    best = best if best is not None else total - flat - expected
+    anomaly = abs(best) > OP_FEE_ABS_TOL and abs(best) / expected > OP_FEE_PCT_TOL
+    return best, expected, total, anomaly
 
 
 def parse_op_ratio(op, order_no):

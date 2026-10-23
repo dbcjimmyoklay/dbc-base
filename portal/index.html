@@ -1632,7 +1632,7 @@ function renderCTable() {
         }
         if (ci===CI['類別'] && val==='雙板') cls += ' td-board';
         if (ci===CI['天數'] && val.includes('含')) cls += ' td-incl';
-        if (ci===CI['註記'] && val==='專屬')  cls += ' td-spec';
+        if (ci===CI['註記'] && val.startsWith('專屬'))  cls += ' td-spec';
         html += `<div class="${cls}">${val}</div>`;
       });
       html += '</div>';
@@ -2629,9 +2629,9 @@ function dcrLvGroup(lv) {
 function dcrParseCoachDays(tiansu) {
   if (!tiansu) return 2;
   const s = String(tiansu).trim();
-  const m = s.match(/(\d+)/);
+  const m = s.match(/(\d+(?:\.\d+)?)/);
   if (!m) return 2;
-  const n = parseInt(m[1]);
+  const n = Math.ceil(parseFloat(m[1]));   // 半天（1.5、2.5）仍需出教練 → 進位成整天
   if (s.includes('無') && !s.includes('含')) return 2;
   return n || 2;
 }
@@ -2669,7 +2669,7 @@ function dcrCalcDaily(courseRows) {
   const daily = {};
   const ensure = (ds, area) => {
     if (!daily[ds]) daily[ds] = {};
-    if (!daily[ds][area]) daily[ds][area] = {pureOrders:new Set(), g0:0, g12:0, g345:0};
+    if (!daily[ds][area]) daily[ds][area] = {pureOrders:new Set(), cohort:{}, excl:{}};
     return daily[ds][area];
   };
 
@@ -2698,6 +2698,11 @@ function dcrCalcDaily(courseRows) {
     const days   = dcrParseCoachDays(tiansu);
 
     const isPure = DCR_PURE.has(item);
+    /* 註記「專屬1對N」= 專屬教練（不與一般團客混班），N = 師生比 */
+    const note   = String(row[5] || '').trim();
+    const isExcl = !isPure && note.startsWith('專屬');
+    const exRatio = parseInt((note.match(/1對(\d+)/) || [])[1]) || 2;
+    const cohortKey = String(row[2] || '').trim();   // 出團日：同一天出團的人才編在同一梯次
 
     /* 出發後 1 ~ days 天，每天都產生 1 個 slot */
     for (let d = 1; d <= days; d++) {
@@ -2706,7 +2711,13 @@ function dcrCalcDaily(courseRows) {
       const ds   = dcrFmtDate(dt);
       const slot = ensure(ds, area);
       if (isPure) slot.pureOrders.add(ono);
-      else        slot[grp]++;
+      else if (isExcl) {
+        const e = slot.excl[ono] || (slot.excl[ono] = {n:0, ratio:exRatio});
+        e.n++;
+      } else {
+        const c = slot.cohort[cohortKey] || (slot.cohort[cohortKey] = {g0:0, g12:0, g345:0});
+        c[grp]++;
+      }
     }
   }
 
@@ -2718,15 +2729,18 @@ const DCR_GROUP_SIZE = {'野澤':6, '斑尾':6, '湯澤':6, '龍平':4};
 
 function dcrCalcCoaches(d, area) {
   const perGroup = DCR_GROUP_SIZE[area] || 6;
-  const g0   = d.g0   || 0;
-  const g12  = d.g12  || 0;
-  const g345 = d.g345 || 0;
   const pure = d.pureOrders ? d.pureOrders.size : 0;
-  const team =
-    (g0   > 0 ? Math.ceil(g0  /perGroup) : 0) +
-    (g12  > 0 ? Math.ceil(g12 /perGroup) : 0) +
-    (g345 > 0 ? Math.ceil(g345/perGroup) : 0);
-  return { coaches: pure + team, pure, team, g0, g12, g345 };
+  /* 一般團客：每個出團日梯次、每個程度組(Lv0 / Lv1-2 / Lv3+)各自 ÷ 每班人數 進位 */
+  let cohortCoaches = 0;
+  for (const k in (d.cohort || {})) {
+    const c = d.cohort[k];
+    for (const g of ['g0', 'g12', 'g345']) if (c[g] > 0) cohortCoaches += Math.ceil(c[g] / perGroup);
+  }
+  /* 專屬教練：每張訂單獨立，人數 ÷ 師生比 進位 */
+  let excl = 0;
+  for (const o in (d.excl || {})) excl += Math.ceil(d.excl[o].n / d.excl[o].ratio);
+  const team = cohortCoaches + excl;
+  return { coaches: pure + team, pure, team, excl };
 }
 
 function dcrBuildRows(daily) {
@@ -2752,7 +2766,7 @@ function dcrBuildRows(daily) {
       const d = (daily[ds] && daily[ds][area]) || {};
       const r = dcrCalcCoaches(d, area);
       const color = dcrColor(area, r.coaches);
-      row.areas[area] = { c: r.coaches, pure: r.pure, team: r.team, color, cap: DCR_CAPS[area] };
+      row.areas[area] = { c: r.coaches, pure: r.pure, team: r.team, excl: r.excl, color, cap: DCR_CAPS[area] };
       if (area === '龍平') row.total_kr += r.coaches;
       else                 row.total_jp += r.coaches;
       row.total += r.coaches;
@@ -2881,7 +2895,7 @@ function dcrRenderTable() {
       if (!d.c) {
         cols += `<td><div class="dcr-badge dcr-cb-none">—</div></td>`;
       } else {
-        const tip = `純${d.pure} 團${d.team} / 上限${d.cap}`;
+        const tip = `純${d.pure} 團${d.team - (d.excl||0)}${d.excl ? ' 專' + d.excl : ''} / 上限${d.cap}`;
         cols += `<td><div class="dcr-badge dcr-cb-${d.color}" title="${tip}">${d.c}</div></td>`;
       }
     }

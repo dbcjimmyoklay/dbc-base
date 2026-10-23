@@ -18,3 +18,6 @@ dbc_sales_report.html
 yoy_compare.py
 yoy_template.html
 yoy_compare.html
+
+# OP備註費用異常清單（含訂單與金額，僅本機）
+OP費用異常清單.txt
