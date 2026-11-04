@@ -393,6 +393,7 @@ def run():
         'DATE_END'         : DATE_END,
         'headers'          : headers,           # 科威原始欄位名稱（供 REPORTER 用）
         'df_records'       : df.to_dict('records'),  # 科威原始資料（供 REPORTER 用）
+        'source_file'      : os.path.basename(latest_file),
         'generated_at'     : datetime.now().isoformat(),
     }
 

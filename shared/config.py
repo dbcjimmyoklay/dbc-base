@@ -277,3 +277,6 @@ COACH_THRESHOLDS = {
     '湯澤': [(5, 'green'), (7, 'yellow'), (9,  'orange'), (999, 'red')],
     '龍平': [(5, 'green'), (7, 'yellow'), (9,  'orange'), (999, 'red')],
 }
+
+# 旅客貼紙試算表（獨立於 DBC Base，貼上試算表網址中 /d/ 與 /edit 之間那一段 ID；留空則每日流程略過貼紙）
+STICKER_SPREADSHEET_ID = "1fqNxVvnCBlrRrhxlHPE8dDsYw98-QiCNED-NHQAEebI"

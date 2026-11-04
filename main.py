@@ -132,7 +132,7 @@ def run_sales():
 def run_daily(skip_watcher=False, skip_reporter=False):
     """
     每日自動流程：
-    CLEANER → COURSE → CHECKOUT → WATCHER → REPORTER → 完整大表.xlsx
+    CLEANER → COURSE → WATCHER → REPORTER → SALES → STICKER(旅客貼紙) → 完整大表.xlsx
     """
     from agents.cleaner  import run as cleaner_run
     from agents.course   import run as course_run
@@ -176,6 +176,15 @@ def run_daily(skip_watcher=False, skip_reporter=False):
     except Exception as e:
         print(f"\n  -- SALES 略過：{e} --")
         results['sales'] = False
+
+    # 6. STICKER 旅客貼紙（寫入獨立的貼紙試算表；沒設定試算表 ID 時自動略過，失敗不影響其他步驟）
+    try:
+        from agents.stickers import run as sticker_run
+        ok, _, _ = run_agent('STICKER 旅客貼紙員', sticker_run, cleaner_output)
+        results['sticker'] = ok
+    except Exception as e:
+        print(f"\n  -- STICKER 略過：{e} --")
+        results['sticker'] = False
 
     # 6. 完整大表.xlsx
     print(f"\n{'-' * 50}")
