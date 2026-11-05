@@ -45,13 +45,15 @@ def clear_rows_from(sh, ws, start_row_index, n_cols):
     """
     清除指定列以後的內容與格式
     start_row_index：0-based（例：從第3列清 → start_row_index=2）
+    清到分頁的「最後一列」（ws.row_count）。以前寫死 2000 列，資料超過 2000 列後，
+    2000 列以後殘留舊格式（分隔列的白色粗體字），重新寫入的資料就變成白字看不到。
     """
     sh.batch_update({'requests': [{
         'updateCells': {
             'range': {
                 'sheetId'        : ws.id,
                 'startRowIndex'  : start_row_index,
-                'endRowIndex'    : 2000,
+                'endRowIndex'    : max(ws.row_count, 2000),
                 'startColumnIndex': 0,
                 'endColumnIndex' : n_cols,
             },
