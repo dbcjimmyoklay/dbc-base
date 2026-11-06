@@ -1,25 +1,37 @@
 ﻿// ═══════════════════════════════════════════════════════════
 // 限時推薦獎金：Portal 後端（Apps Script）要加的程式
-// 位置：打開「使用者管理」試算表 → 擴充功能 → Apps Script → Code.gs
+// 專案：DBC Portal API（「使用者管理」試算表 → 擴充功能 → Apps Script → 程式碼.gs）
+// 共兩處修改，貼完請 Ctrl+S 儲存，再重新部署（步驟在最下面）
 // ═══════════════════════════════════════════════════════════
 
-// ① 在 doGet 的 action 判斷區，找到 getCoach 那一段，在它旁邊加上（照抄 getCoach 的寫法與括號）：
+// ───────────────────────────────────────────────────────────
+// 修改 ①：在 doGet 裡，找到這一行（約第 34 行）
 //
-//    } else if (action === 'getBonus') {
-//      return makeResponse(getBonus());
+//     if (action === 'getCoach')    return resp(getCoach());
 //
-// ② 在檔案最下面新增這個函式：
+// 在它「正下方」新增一行（複製下面這一行即可，縮排和上面對齊）：
+
+    if (action === 'getBonus')    return resp(getBonus());
+
+// ───────────────────────────────────────────────────────────
+// 修改 ②：把游標移到整個檔案的最下面（按 Ctrl+End），按 Enter 空一行，貼上這個函式：
 
 function getBonus() {
-  var ss = SpreadsheetApp.openById('12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc');   // DBC Base
-  var sh = ss.getSheetByName('限時推薦獎金');
-  if (!sh) return [];
-  var last = sh.getLastRow();
-  if (last < 2) return [];
-  // A~I 欄（類型/地區/開始日期/結束日期/組數/人數下限/人數上限/獎金/狀態）。
-  // J 欄「內部備註」不會傳到 Portal。用 getDisplayValues 讓日期維持 yyyy/mm/dd 文字。
-  return sh.getRange(2, 1, last - 1, 9).getDisplayValues();
+  const ss = SpreadsheetApp.openById('12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc');   // DBC Base
+  const sh = ss.getSheetByName('限時推薦獎金');
+  if (!sh || sh.getLastRow() < 2) return { status: 'ok', rows: [] };
+  // A~I 欄：類型 / 地區 / 開始日期 / 結束日期 / 組數 / 人數下限 / 人數上限 / 獎金 / 狀態
+  // J 欄「內部備註」不會傳到 Portal。getDisplayValues 讓日期維持 yyyy/mm/dd 文字。
+  return { status: 'ok', rows: sh.getRange(2, 1, sh.getLastRow() - 1, 9).getDisplayValues() };
 }
 
-// ③ 儲存（Ctrl+S）後：部署 → 管理部署作業 → 編輯（鉛筆）→ 版本選「新版本」→ 部署。
-//    ⚠ 每次改完 Apps Script 都要重新部署才會生效。
+// ───────────────────────────────────────────────────────────
+// 部署（改完一定要做，不然不會生效）：
+//   1. Ctrl+S 儲存
+//   2. 右上角「部署」→「管理部署作業」
+//   3. 在現有的「網頁應用程式」那一列，點右邊的鉛筆（編輯）
+//   4. 「版本」下拉選單選「新版本」→ 按「部署」
+//   5. 網址不會變，Portal 不用改。如果跳出「需要授權」，用你的帳號按允許。
+//
+// 出問題要復原：同一個畫面，版本改選回上一個版本，再按「部署」。
+// ═══════════════════════════════════════════════════════════

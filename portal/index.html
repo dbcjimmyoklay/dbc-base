@@ -1408,6 +1408,27 @@ function _clearSess() {
   try { [_SK, _TK, _TSK].forEach(k => localStorage.removeItem(k)); } catch(e) {}
 }
 
+/* 背景向後端要一次最新的使用者資料（後端每個請求本來就會做 checkUser）。
+   角色或可看頁面有變動才更新選單；任何失敗都靜默忽略，不影響使用 */
+async function refreshSessionInBackground() {
+  try {
+    const res = await fetch(apiUrl('check'), { redirect: 'follow' });
+    const d   = await res.json();
+    if (d.status !== 'approved' || !Array.isArray(d.pages)) return;
+    const same = JSON.stringify(d.pages) === JSON.stringify(currentUser?.pages || []) && d.role === currentUser?.role;
+    if (same) return;
+    currentUser = Object.assign({}, currentUser, d);      // 保留原有欄位（例如 userKey），只用新資料覆蓋
+    _saveSess(currentUser, idToken);
+    document.getElementById('urole').textContent    = currentUser.role || '';
+    document.getElementById('user-tag').textContent = currentUser.role || '';
+    const cur = document.getElementById('page-title')?.textContent || '';
+    buildNav(currentUser.pages || []);
+    document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+    const hit = [...document.querySelectorAll('.nav-item[data-page]')].find(e => e.dataset.page === cur);
+    (hit || document.getElementById('nav-home'))?.classList.add('active');
+  } catch (e) {}
+}
+
 window.onload = () => {
   /* Service Worker */
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -1419,6 +1440,7 @@ window.onload = () => {
     idToken           = sess.token;
     hide('login-screen');
     showApp();
+    refreshSessionInBackground();   // 背景更新角色/可看頁面（後端新增頁面權限後，不用重新登入就會出現在選單）
     // 不呼叫 initialize() / prompt()，不會有任何 Google 登入提示
   } else {
     show('login-screen', 'flex');
