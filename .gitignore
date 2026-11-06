@@ -21,3 +21,9 @@ yoy_compare.html
 
 # OP備註費用異常清單（含訂單與金額，僅本機）
 OP費用異常清單.txt
+
+# 預覽/測試圖片與 PDF（可能含旅客姓名，一律不進版控）
+*.png
+*.jpg
+*.webp
+*.pdf
