@@ -404,7 +404,16 @@ def beautify(wb, META):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     to_xlsx = '--xlsx' in sys.argv
-    src = args[0] if args else sorted(glob.glob(os.path.join(BASE, '原始大總表[0-9][0-9][0-9][0-9].xlsx')))[-1]
+    if args:
+        src = args[0]
+    else:
+        # 與每日流程相同的「最新檔案」判斷（檔名日期優先、跨年不會顛倒）
+        sys.path.insert(0, BASE)
+        from shared.utils import file_sort_key
+        files = glob.glob(os.path.join(BASE, '原始大總表[0-9][0-9][0-9][0-9].xlsx'))
+        if not files:
+            sys.exit('找不到 DBC base 資料夾裡的「原始大總表MMDD.xlsx」，請先放入最新的大總表')
+        src = max(files, key=file_sort_key)
     print('讀取', os.path.basename(src))
     d = load(src)
     gsh = None if to_xlsx else open_gsheet()

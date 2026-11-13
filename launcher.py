@@ -19,6 +19,7 @@ PYTHON       = sys.executable   # 用同一個 python.exe
 PORTAL_URL   = 'https://dbcjimmyoklay.github.io/dbc-base/portal/'
 DBC_BASE_URL = 'https://docs.google.com/spreadsheets/d/12p71jgMErzZYO4toU2LVELDPfwklHCyDARclldYImCc/'
 COACH_VER_PATH = os.path.join(BASE_DIR, 'portal', 'coach_version.json')
+COST_ID_PATH   = os.path.join(BASE_DIR, 'cost_sheet_id.txt')   # 26/27成本大表的 Google 試算表 ID
 
 # ── 顏色（與 Portal 一致）──
 BG0  = '#000b18'
@@ -40,9 +41,9 @@ class Launcher(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('DBC 影子中台 啟動器')
-        self.geometry('640x600')
+        self.geometry('640x690')
         self.configure(bg=BG0)
-        self.minsize(560, 520)
+        self.minsize(560, 600)
 
         # 字型
         self.f_title = tkfont.Font(family='Microsoft JhengHei UI', size=14, weight='bold')
@@ -88,6 +89,10 @@ class Launcher(tk.Tk):
         self._mkbtn(btns, '🏨  訂房表更新',
                     '重新讀取最新大總表 → 更新課程安排/入住單',
                     self.run_checkin, 2, 1)
+
+        self._mkbtn(btns, '💰  成本大表更新',
+                    '讀取最新大總表 → 只更新「26/27成本大表」（與每日流程無關）',
+                    self.run_cost, 3, 0, colspan=2)
 
         # Status
         self.status = tk.Label(self, text='閒置 ✓', font=self.f_sub,
@@ -258,6 +263,22 @@ class Launcher(tk.Tk):
             self._chain_push(f'入住單更新 {datetime.now():%Y-%m-%d %H:%M}')
         self._run_cmd_async('main.py --checkin',
             [PYTHON, 'main.py', '--checkin'], then=after_checkin)
+
+    def run_cost(self):
+        """獨立更新 26/27 成本大表：只跑 cost_report.py（讀資料夾內最新大總表 → 寫入成本大表 Google 試算表）。
+        不跑每日流程、不動 DBC Base、也不 git push。"""
+        def after_cost(success):
+            if not success:
+                self._set_status('✗ 成本大表更新失敗', NG_C)
+                return
+            try:
+                with open(COST_ID_PATH, encoding='utf-8') as f:
+                    sid = f.read().strip()
+                self._log(f'📑 成本大表：https://docs.google.com/spreadsheets/d/{sid}/\n', 'dim')
+            except Exception:
+                pass
+        self._run_cmd_async('cost_report.py（成本大表）',
+            [PYTHON, 'cost_report.py'], then=after_cost)
 
     def open_portal(self):
         webbrowser.open(PORTAL_URL)
