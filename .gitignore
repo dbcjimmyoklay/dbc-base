@@ -27,3 +27,6 @@ OP費用異常清單.txt
 *.jpg
 *.webp
 *.pdf
+
+# 成本大表等 Excel 輸出（含旅客姓名/成本資料）：任何 xlsx 一律不進版控
+*.xlsx
