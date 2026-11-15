@@ -24,6 +24,7 @@ CHECKIN 入住員
 """
 
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -92,13 +93,18 @@ def _read_booking_info(sh_booking):
     idx_room  = col_map.get('房型',    -1)
     idx_note  = col_map.get('房間分配', -1)
 
+    multi_rows = 0
     for row in all_vals[1:]:
         def _g(idx):
             return row[idx].strip() if 0 <= idx < len(row) else ''
 
-        ding  = _g(idx_ding)
-        if not ding or not ding.isdigit():
+        # 訂編欄可能一格放多個訂單（一起入住的客人併在同一列，例如「6135 6136」，
+        # 姓名也併在一格）→ 抓出所有訂編，每個訂編都套用這一列的旅館/房型
+        dings = re.findall(r'\d{4,}', _g(idx_ding))
+        if not dings:
             continue
+        if len(dings) > 1:
+            multi_rows += 1
 
         cn    = _g(idx_cn)
         en    = _g(idx_en)
@@ -106,15 +112,17 @@ def _read_booking_info(sh_booking):
         room  = _g(idx_room)
         note  = _g(idx_note)
 
-        key = f"{ding}_{cn}" if cn else f"{ding}_en_{en}"
-        info_map[key] = {
-            '旅館'    : hotel,
-            '房型'    : room,
-            '入住備註': note,
-        }
+        for ding in dings:
+            key = f"{ding}_{cn}" if cn else f"{ding}_en_{en}"
+            info_map[key] = {
+                '旅館'    : hotel,
+                '房型'    : room,
+                '入住備註': note,
+            }
 
     hotel_count = sum(1 for v in info_map.values() if v['旅館'])
-    print(f"  野澤訂房表：{len(info_map)} 筆，其中 {hotel_count} 筆已有旅館資訊")
+    print(f"  野澤訂房表：{len(info_map)} 筆，其中 {hotel_count} 筆已有旅館資訊"
+          f"（含 {multi_rows} 列「多訂單同一格」已展開）")
     return info_map
 
 
