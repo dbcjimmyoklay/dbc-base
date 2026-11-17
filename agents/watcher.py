@@ -305,15 +305,29 @@ def _write_change_log(sh, ws_change, change_logs):
 # Part B：野澤訂房比對
 # ═══════════════════════════════════════════
 
+def _split_names(s):
+    """訂房表同一格可能放多個姓名（空格/換行/逗號/頓號分隔）→ 拆成清單"""
+    return [t for t in re.split(r'[\s,，、/／;；]+', str(s or '').strip()) if t]
+
+
+def _norm_en(s):
+    """英文姓名正規化：只留英文字母、轉大寫（忽略空格、連字號、逗號、大小寫差異），
+    同一格有多位英文姓名時整格正規化後可以直接做「包含」比對"""
+    return re.sub(r'[^A-Z]', '', str(s or '').upper())
+
+
 def _read_booking_table(sh_booking):
     """
     讀取野澤訂房表 26-27 分頁
     支援「併房」：同一儲存格可有多個訂編（空格/換行/逗號分隔）
+    支援同一格多個姓名（例如中文姓名「黃芷翎 黃洳羚」）
 
     回傳：
       existing_dings → set  訂房表所有看過的訂編（含併房展開）
       order_info     → dict ding → {出發日期, 泊數, 是併房, rows:[...]}
       placeholders   → dict ding → list[(佔位中文姓名, 佔位英文姓名)]
+      booking_rows   → list  訂房表每一列的原始儲存格：{dings, cn, en, dep}
+                       （逐人比對姓名/英文名用，不能拆散成每個訂編一份）
     """
     ws = sh_booking.worksheet(NOZAWA_BOOKING_SHEET)
     all_vals = ws.get_all_values()
@@ -321,9 +335,10 @@ def _read_booking_table(sh_booking):
     existing_dings = set()
     order_info     = {}
     placeholders   = {}
+    booking_rows   = []
 
     if not all_vals:
-        return existing_dings, order_info, placeholders
+        return existing_dings, order_info, placeholders, booking_rows
 
     col_map = {h.strip(): i for i, h in enumerate(all_vals[0]) if h.strip()}
     idx_ding  = col_map.get('訂編',   -1)
@@ -360,8 +375,11 @@ def _read_booking_table(sh_booking):
         n_baby  = _to_int(_g(idx_baby))  if idx_baby  >= 0 else 0
         head_count = n_adult + n_child + n_baby
 
-        is_ph       = bool(re.match(r'^旅客\w+$', cn))
+        # 同一格多個姓名時，每個姓名都是佔位名（旅客1 旅客2）才算佔位
+        name_toks   = _split_names(cn)
+        is_ph       = bool(name_toks) and all(re.match(r'^旅客\w*$', t) for t in name_toks)
         is_combined = len(dings_in_row) > 1
+        booking_rows.append({'dings': dings_in_row, 'cn': cn, 'en': en, 'dep': dep})
 
         for ding in dings_in_row:
             existing_dings.add(ding)
@@ -387,10 +405,10 @@ def _read_booking_table(sh_booking):
             if is_ph:
                 placeholders.setdefault(ding, []).append((cn, en))
 
-    return existing_dings, order_info, placeholders
+    return existing_dings, order_info, placeholders, booking_rows
 
 
-def _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders):
+def _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders, booking_rows=None):
     """
     新版比對：產出 3 大區塊
       new_orders     → 新增訂單（按訂編去重，每訂單一列）
@@ -516,32 +534,42 @@ def _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders):
             '備註'    : f"原佔位：{'／'.join([n[0] for n in ph_list])}（{len(ph_list)}位）",
         })
 
-    # ── 區塊 3b：英文姓名補上（訂房表有真名但英文空白 → 新資料已有英文）──
-    for ding, info in order_info.items():
-        if ding not in new_by_ding:
+    # ── 區塊 3b：英文姓名補上（訂房表有真名，但英文欄缺這個人的英文 → 新資料已有英文）──
+    # 逐人比對：訂房表同一格可能放多位姓名（中文「黃芷翎 黃洳羚」），英文欄通常只寫第一位。
+    # 把中文格拆成每個人，去新資料（同訂編）找同名的人；
+    # 若他的英文姓名不在訂房表英文格裡（正規化後比對，忽略空格/連字號/大小寫）→ 通知補上。
+    # 單一姓名、英文格已經有（拼法不同的）英文時，不算「補上」，維持原本只通知空白的行為。
+    seen3b = set()
+    for br in (booking_rows or []):
+        toks = [t for t in _split_names(br['cn']) if not PLACEHOLDER_RE.match(t)]
+        if not toks:
             continue
-        seen = set()
-        for row in info['rows']:
-            cn, en = row.get('中文姓名', ''), row.get('英文姓名', '')
-            if row.get('是佔位') or not cn or en or cn in seen:
-                continue
-            seen.add(cn)
-            match = [p for p in new_by_ding[ding]
-                     if str(p.get('中文姓名', '') or '').strip() == cn]
-            if not match:
-                continue
-            new_en = str(match[0].get('英文姓名', '') or '').strip()
-            if not new_en:
-                continue
-            missing_names.append({
-                '訂編'    : ding,
-                '出發日期': info.get('出發日期', ''),
-                '中文姓名': cn,
-                '英文姓名': new_en,
-                '佔位數'  : 0,
-                '佔位姓名': '',
-                '備註'    : '訂房表英文姓名空白 → 新資料已補上',
-            })
+        en_cell  = _norm_en(br['en'])
+        multi    = len(toks) > 1
+        for ding in br['dings']:
+            for p in new_by_ding.get(ding, []):
+                pcn = str(p.get('中文姓名', '') or '').strip()
+                pen = str(p.get('英文姓名', '') or '').strip()
+                if pcn not in toks or not pen:
+                    continue
+                ne = _norm_en(pen)
+                if not ne or ne in en_cell:            # 訂房表已經有這位的英文
+                    continue
+                if en_cell and not multi:              # 單一姓名且英文欄已有內容 → 不是「補上」
+                    continue
+                if (ding, pcn) in seen3b:
+                    continue
+                seen3b.add((ding, pcn))
+                missing_names.append({
+                    '訂編'    : ding,
+                    '出發日期': order_info.get(ding, {}).get('出發日期', ''),
+                    '中文姓名': pcn,
+                    '英文姓名': pen,
+                    '佔位數'  : 0,
+                    '佔位姓名': '',
+                    '備註'    : ('訂房表英文姓名空白 → 新資料已補上' if not en_cell
+                                 else '同格有多位姓名，訂房表缺這位的英文姓名 → 新資料已補上'),
+                })
     missing_names.sort(key=lambda x: (x['出發日期'], x['訂編']))
 
     return new_orders, removed_orders, changes, missing_names
@@ -801,12 +829,12 @@ def run(cleaner_output=None):
     gc         = gspread.authorize(creds)
     sh_booking = gc.open_by_key(NOZAWA_BOOKING_SPREADSHEET_ID)
 
-    existing_dings, order_info, placeholders = _read_booking_table(sh_booking)
+    existing_dings, order_info, placeholders, booking_rows = _read_booking_table(sh_booking)
     print(f"  訂房表現有訂單：{len(existing_dings)} 個"
           f"（含併房展開）")
 
     new_orders, removed_orders, changes, missing_names = \
-        _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders)
+        _compare_nozawa(all_records_flat, existing_dings, order_info, placeholders, booking_rows)
 
     print(f"  新增訂單：{len(new_orders)} 個")
     print(f"  刪減訂單：{len(removed_orders)} 個")
