@@ -36,7 +36,7 @@ try:
         get_item, get_weekday, extract_date_from_group,
         has_value, clean_val, clean_seq_no, safe_int, clean_order_no, clean_diet,
         normalize_level, classify_cols,
-        parse_op_days, parse_op_ratio, pick_op, check_op_fee,
+        parse_op_days, parse_op_ratio, pick_op, check_op_fee, is_group_class,
         infer_days_from_fee,
         build_record_key,
     )
@@ -51,7 +51,7 @@ except ImportError:
         get_item, get_weekday, extract_date_from_group,
         has_value, clean_val, clean_seq_no, safe_int, clean_order_no, clean_diet,
         normalize_level, classify_cols,
-        parse_op_days, parse_op_ratio, pick_op, check_op_fee,
+        parse_op_days, parse_op_ratio, pick_op, check_op_fee, is_group_class,
         infer_days_from_fee,
         build_record_key,
     )
@@ -141,6 +141,7 @@ def run():
     # ── 5. 純課程：OP 解析 + 費用反推 ──
     order_op_cache = {}
     op_anomalies   = []
+    class_no_days  = []      # 團體班訂單 OP備註 找不到「共N日」的清單
     # 同團號所有列的 OP備註合併（科威 OP 只寫在該團第一列，含多張訂單的段落）
     group_ops = {}
     for gno, g in df.groupby('團號', sort=False):
@@ -154,6 +155,16 @@ def run():
         op          = pick_op(first_row.get('OP備註', ''),
                               group_ops.get(first_row.get('團號', ''), ''), order_no)
         days_val    = parse_op_days(op, order_no)
+
+        # 純課程「團體班」（S4-SZN/SZB/SZY）：沒有師生比、也沒有 1 對 N 計價，
+        # 註記固定為「團體班」；上課天數只信 OP備註「共N日」（缺的列入提醒清單）
+        if is_group_class(first_row.get('團號', '')):
+            tiansu = f"{days_val:g}" if days_val else ''
+            order_op_cache[str(order_no)] = (tiansu, '團體班')
+            if not tiansu:
+                class_no_days.append(f"#{str(int(str(order_no).lstrip('0') or 0))} {item} {first_row.get('團號', '')}（{len(group)}人）")
+            continue
+
         ratio_val   = parse_op_ratio(op, order_no)
         tiansu      = f"{days_val:g}" if days_val else ''   # 保留半天：1.5 → '1.5'、2.0 → '2'
         note        = ratio_val or ''
@@ -376,11 +387,18 @@ def run():
             f"#{a['訂編']} {a['項目']} {a['團號']} {a['人數']}人｜OP：{a['OP天數']}日 {a['OP師生比']}"
             f"｜預期課程費 {a['預期課程費']:,}｜實收(訂單團費) {a['訂單團費合計']:,}"
             f"｜扣租借後差額 {a['扣租借後差額']:+,}")
+    if class_no_days:
+        lines += ['', f"純課程「團體班」找不到上課天數（OP備註沒有「共N日」），共 {len(class_no_days)} 張；"
+                      f"教練需求暫以 1 天計算，請補上 OP備註 的「共N日」：", *class_no_days]
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
     if op_anomalies:
         print(f"\n⚠ OP備註與團費差異過大的純課訂單：{len(op_anomalies)} 張（詳見 OP費用異常清單.txt）")
-        for l in lines[3:]:
+        for l in lines[3:3 + len(op_anomalies)]:
+            print('  ' + l)
+    if class_no_days:
+        print(f"\n⚠ 純課程團體班找不到上課天數：{len(class_no_days)} 張（教練需求暫以 1 天計，請補 OP備註「共N日」）")
+        for l in class_no_days:
             print('  ' + l)
 
     # ── 10. 序列化輸出 ──

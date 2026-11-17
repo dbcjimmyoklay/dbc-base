@@ -31,7 +31,7 @@ RULE_TXT = {'lodge': '標準3泊 + 續滑天數(保留市區住宿者不加)', '
             'days': '標準2日 + 續滑天數', 'pax': '每人1'}
 SHEET = lambda r, a: f"{r}{'含' if a else '不含'}機票"
 GRP = re.compile(r'^S4-(J|K)-(N|B|Y)([TS])?([0A])(\d{6})([A-Z]?)$')
-PURE = re.compile(r'^S4-Z([YNB])\d{6}')
+PURE = re.compile(r'^S4-S?Z([YNB])\d{6}')   # S4-ZN/ZB/ZY 純課程；S4-SZN/SZB/SZY 純課程團體班（同樣只扣刷卡手續費）
 PURE_NAME = {'Y': '湯澤', 'N': '野澤', 'B': '斑尾'}
 
 

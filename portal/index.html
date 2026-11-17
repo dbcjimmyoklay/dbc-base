@@ -2727,7 +2727,7 @@ function dcrCalcDaily(courseRows) {
   const daily = {};
   const ensure = (ds, area) => {
     if (!daily[ds]) daily[ds] = {};
-    if (!daily[ds][area]) daily[ds][area] = {pureOrders:new Set(), cohort:{}, excl:{}};
+    if (!daily[ds][area]) daily[ds][area] = {pureOrders:new Set(), cohort:{}, excl:{}, cls:{}};
     return daily[ds][area];
   };
 
@@ -2753,11 +2753,13 @@ function dcrCalcDaily(courseRows) {
     const lv     = row[16] || 'lv0';
     const grp    = dcrLvGroup(lv);
     const tiansu = String(row[4] || '').trim();
-    const days   = dcrParseCoachDays(tiansu);
-
-    const isPure = DCR_PURE.has(item);
-    /* 註記「專屬1對N」= 專屬教練（不與一般團客混班），N = 師生比 */
     const note   = String(row[5] || '').trim();
+    const isPure = DCR_PURE.has(item);
+    /* 純課程「團體班」（團號 S4-SZN/SZB/SZY，註記「團體班」）：獨立計算，不與一般純課程、團客混在一起。
+       上課天數沒填時以 1 天計（清洗員會列出缺天數的訂單提醒補 OP備註「共N日」）*/
+    const isClass = isPure && note.startsWith('團體班');
+    const days   = (isClass && !tiansu) ? 1 : dcrParseCoachDays(tiansu);
+    /* 註記「專屬1對N」= 專屬教練（不與一般團客混班），N = 師生比 */
     const isExcl = !isPure && note.startsWith('專屬');
     const exRatio = parseInt((note.match(/1對(\d+)/) || [])[1]) || 2;
     const cohortKey = String(row[2] || '').trim();   // 出團日：同一天出團的人才編在同一梯次
@@ -2768,7 +2770,12 @@ function dcrCalcDaily(courseRows) {
       dt.setDate(dt.getDate() + d);
       const ds   = dcrFmtDate(dt);
       const slot = ensure(ds, area);
-      if (isPure) slot.pureOrders.add(ono);
+      if (isClass) {
+        /* 團體班：與團客相同的邏輯（依出團日分梯次、再依程度分組），但每班上限 4 人 */
+        const c = slot.cls[cohortKey] || (slot.cls[cohortKey] = {g0:0, g12:0, g345:0});
+        c[grp]++;
+      }
+      else if (isPure) slot.pureOrders.add(ono);
       else if (isExcl) {
         const e = slot.excl[ono] || (slot.excl[ono] = {n:0, ratio:exRatio});
         e.n++;
@@ -2784,6 +2791,8 @@ function dcrCalcDaily(courseRows) {
 
 /* 每位教練可帶人數（依地區）：龍平 1班4人，其餘 1班6人（不可調整其他地區） */
 const DCR_GROUP_SIZE = {'野澤':6, '斑尾':6, '湯澤':6, '龍平':4};
+/* 純課程「團體班」每班上限 4 人（各區相同） */
+const DCR_CLASS_SIZE = 4;
 
 function dcrCalcCoaches(d, area) {
   const perGroup = DCR_GROUP_SIZE[area] || 6;
@@ -2798,7 +2807,13 @@ function dcrCalcCoaches(d, area) {
   let excl = 0;
   for (const o in (d.excl || {})) excl += Math.ceil(d.excl[o].n / d.excl[o].ratio);
   const team = cohortCoaches + excl;
-  return { coaches: pure + team, pure, team, excl };
+  /* 團體班：獨立計算（出團日梯次 × 程度組，各自 ÷ 4 進位），不併入一般純課程或團客 */
+  let cls = 0;
+  for (const k in (d.cls || {})) {
+    const c = d.cls[k];
+    for (const g of ['g0', 'g12', 'g345']) if (c[g] > 0) cls += Math.ceil(c[g] / DCR_CLASS_SIZE);
+  }
+  return { coaches: pure + team + cls, pure, team, excl, cls };
 }
 
 function dcrBuildRows(daily) {
@@ -2824,7 +2839,7 @@ function dcrBuildRows(daily) {
       const d = (daily[ds] && daily[ds][area]) || {};
       const r = dcrCalcCoaches(d, area);
       const color = dcrColor(area, r.coaches);
-      row.areas[area] = { c: r.coaches, pure: r.pure, team: r.team, excl: r.excl, color, cap: DCR_CAPS[area] };
+      row.areas[area] = { c: r.coaches, pure: r.pure, team: r.team, excl: r.excl, cls: r.cls, color, cap: DCR_CAPS[area] };
       if (area === '龍平') row.total_kr += r.coaches;
       else                 row.total_jp += r.coaches;
       row.total += r.coaches;
@@ -2953,7 +2968,7 @@ function dcrRenderTable() {
       if (!d.c) {
         cols += `<td><div class="dcr-badge dcr-cb-none">—</div></td>`;
       } else {
-        const tip = `純${d.pure} 團${d.team - (d.excl||0)}${d.excl ? ' 專' + d.excl : ''} / 上限${d.cap}`;
+        const tip = `純${d.pure} 團${d.team - (d.excl||0)}${d.excl ? ' 專' + d.excl : ''}${d.cls ? ' 班' + d.cls : ''} / 上限${d.cap}`;
         cols += `<td><div class="dcr-badge dcr-cb-${d.color}" title="${tip}">${d.c}</div></td>`;
       }
     }

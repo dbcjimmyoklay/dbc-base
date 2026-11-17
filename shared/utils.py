@@ -131,6 +131,16 @@ def get_item(g):
     return '其他'
 
 
+def is_group_class(g):
+    """純課程「團體班」團號：S4-SZN（野澤）/ S4-SZB（斑尾）/ S4-SZY（湯澤）。
+    一個人也能報名、每班上限 4 人、依程度分班。
+    項目仍歸為「○○純課」（團號含 ZN/ZB/ZY），只用註記「團體班」區分，
+    教練需求才能把它和一般純課程（每單 1 位教練）、團客分開獨立計算。"""
+    if pd.isna(g):
+        return False
+    return bool(re.search(r'S4-SZ[NBY]', str(g), re.IGNORECASE))
+
+
 # ===== LEVEL 標準化 =====
 
 def normalize_level(lv):
